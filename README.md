@@ -116,8 +116,9 @@
 
 <table>
   <tr>
-    <td><img src="screenshots/Screenshot_20251111_195816_One UI Home.jpg" width="300px"/><br/><b>Quick Settings - Active</b><br/>VPN enabled from notification shade</td>
-    <td><img src="screenshots/Screenshot_20251111_195823_One UI Home.jpg" width="300px"/><br/><b>Quick Settings - Available</b><br/>One-tap VPN control</td>
+    <td><img src="screenshots/Screenshot_20251111_195816_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Active</b><br/>VPN enabled from notification shade</td>
+    <td><img src="screenshots/Screenshot_20251111_195823_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Available</b><br/>One-tap VPN control</td>
+    <td><img src="screenshots/Screenshot_20251111_195804_One UI Home.jpg" width="250px"/><br/><b>VPN Notification</b><br/>Shows subscription: 12 months remaining</td>
   </tr>
 </table>
 
