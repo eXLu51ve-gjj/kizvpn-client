@@ -1,12 +1,17 @@
-# 🚀 KIZ VPN - Android VPN Client
-
 <div align="center">
+
+<img src="app/src/main/res/drawable/kiz_vpn_logo.png" width="200px" alt="KIZ VPN Logo"/>
+
+# KIZ VPN
 
 **Modern Android VPN client with VLESS and WireGuard support**
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://android.com)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9+-purple.svg)](https://kotlinlang.org)
+[![Version](https://img.shields.io/badge/Version-2.2.1-brightgreen.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
+
+📖 **Languages:** [🇷🇺 Русский](README.ru.md) | [🇬🇧 English](README.md)
 
 </div>
 
