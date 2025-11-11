@@ -4,163 +4,153 @@
 
 # KIZ VPN
 
-**Modern Android VPN client with VLESS and WireGuard support**
+**Современный Android VPN клиент с поддержкой VLESS и WireGuard**
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://android.com)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9+-purple.svg)](https://kotlinlang.org)
 [![Version](https://img.shields.io/badge/Version-2.2.1-brightgreen.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
 
-📖 **Languages:** [🇷🇺 Русский](README.ru.md) | [🇬🇧 English](README.md)
+📖 **Languages:** [🇷🇺 Русский](README.md) | [🇬🇧 English](README.en.md)
 
 </div>
 
 ---
 
-## ✨ Features
+## ✨ Возможности
 
-### Core Functionality
-- 🔒 **VLESS Protocol** - Full support with Reality, WebSocket, TLS/XTLS
-- 🛡️ **WireGuard Protocol** - Modern, fast, and secure VPN
-- ⚡ **Quick Settings Tile** - Toggle VPN from notification shade
-- 📊 **Real-time Statistics** - Monitor upload/download speeds
-- 🌓 **Dark Theme** - Beautiful modern UI with Jetpack Compose
+### Основная функциональность
+- 🔒 **Протокол VLESS** - Полная поддержка Reality, WebSocket, TLS/XTLS
+- 🛡️ **Протокол WireGuard** - Современный, быстрый и безопасный VPN
+- ⚡ **Плитка быстрых настроек** - Переключение VPN из шторки уведомлений
+- 📊 **Статистика в реальном времени** - Мониторинг скорости загрузки/выгрузки
+- 🌓 **Темная тема** - Красивый современный интерфейс на Jetpack Compose
 
-### Advanced Features
-- 📅 **Subscription Management** - Track remaining days/hours
-- 📷 **QR Code Scanner** - Import configs easily
-- 🔄 **Auto-connect** - Start VPN on app launch
-- 📜 **Connection History** - Track all VPN sessions
-- 🔗 **Deep Link Support** - Import configs from Telegram bot
-- 📱 **Multi-config Support** - Save and switch between multiple configs
-
----
-
-## 🛠️ Technologies
-
-- **Language:** Kotlin
-- **UI Framework:** Jetpack Compose + Material3
-- **Architecture:** MVVM
-- **VPN Core:** Based on [XiVPN](https://github.com/Exclude0122/XiVPN) (GPL-3.0)
-- **Protocols:** VLESS (Xray-core), WireGuard
+### Расширенные возможности
+- 📅 **Управление подписками** - Отслеживание оставшихся дней/часов
+- 📷 **Сканер QR кодов** - Простой импорт конфигов
+- 🔄 **Автоподключение** - Запуск VPN при старте приложения
+- 📜 **История подключений** - Отслеживание всех VPN сессий
+- 🔗 **Поддержка Deep Link** - Импорт конфигов из Telegram бота
+- 📱 **Множественные конфиги** - Сохранение и переключение между конфигами
 
 ---
 
-## 📥 Download
+## 📥 Скачать
 
-### Latest Release
+### Последний релиз
 
-[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
+[![Download APK](https://img.shields.io/badge/Скачать-APK-green.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
 
-**Current Version:** v2.2.1  
-**Size:** ~162 MB  
-**Min Android:** 8.0 (API 26)
+**Текущая версия:** v2.2.1  
+**Размер:** ~162 MB  
+**Минимум Android:** 8.0 (API 26)
 
-[📦 Download Latest APK](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest/download/KIZ_VPN.public.2.2.1.apk)
+[📦 Скачать последний APK](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest/download/KIZ_VPN.public.2.2.1.apk)
 
-### Installation
+### Установка
 
-1. Download the APK file
-2. Enable "Install from Unknown Sources" in Settings
-3. Open the APK file and install
-4. Grant VPN permission when prompted
+1. Скачайте APK файл
+2. Включите "Установка из неизвестных источников" в настройках
+3. Откройте APK файл и установите
+4. Выдайте разрешение VPN при запросе
 
-### ⚠️ Important Notes
+### ⚠️ Важные замечания
 
-**This is a demo build:**
-- ✅ **VPN works with any VLESS/WireGuard config**
-- ✅ All core VPN features are functional
-- ❌ Subscription management requires API server configuration
-- ❌ Key activation requires API server configuration
+**Это демо-версия:**
+- ✅ **VPN работает с любым VLESS/WireGuard конфигом**
+- ✅ Все основные функции VPN работают
+- ❌ Управление подписками требует настройки API сервера
+- ❌ Активация ключей требует настройки API сервера
 
-**To use:**
-1. Paste your VLESS or WireGuard config
-2. Connect to VPN - it will work!
-3. Subscription info won't show (requires your own server)
+**Как использовать:**
+1. Вставьте ваш VLESS или WireGuard конфиг
+2. Подключитесь - VPN будет работать!
+3. Информация о подписке не отображается (требуется собственный сервер)
 
-**To enable full features:**
-- Configure your own 3x-ui panel
-- Update server settings in code (see Getting Started)
+**Для полной функциональности:**
+- Настройте собственную 3x-ui панель
+- Обновите настройки сервера в коде (см. раздел Начало работы)
 
-**Note:** This is an unsigned debug build. You may see a warning from Google Play Protect - this is normal for apps installed outside the Play Store.
+**Примечание:** Это неподписанная debug сборка. Вы можете увидеть предупреждение от Google Play Protect - это нормально для приложений, установленных вне Play Store.
 
 ---
 
-## 📱 Screenshots
+## 📱 Скриншоты
 
-### Main Interface
+### Основной интерфейс
 
 <div align="center">
 
 <table>
   <tr>
-    <td><img src="screenshots/Screenshot_20251111_195621_KIZ VPN.jpg" width="250px"/><br/><b>Home Screen - Disconnected</b><br/>Beautiful animated interface</td>
-    <td><img src="screenshots/Screenshot_20251111_200214_KIZ VPN.jpg" width="250px"/><br/><b>Home Screen - Connected</b><br/>Active VPN with animation</td>
-    <td><img src="screenshots/Screenshot_20251111_195753_KIZ VPN.jpg" width="250px"/><br/><b>Network Statistics</b><br/>Real-time traffic monitoring</td>
+    <td><img src="screenshots/Screenshot_20251111_195621_KIZ VPN.jpg" width="250px"/><br/><b>Главный экран - Отключено</b><br/>Красивый анимированный интерфейс</td>
+    <td><img src="screenshots/Screenshot_20251111_200214_KIZ VPN.jpg" width="250px"/><br/><b>Главный экран - Подключено</b><br/>Активный VPN с анимацией</td>
+    <td><img src="screenshots/Screenshot_20251111_195753_KIZ VPN.jpg" width="250px"/><br/><b>Статистика сети</b><br/>Мониторинг трафика в реальном времени</td>
   </tr>
 </table>
 
 </div>
 
-### Features
+### Функции
 
 <div align="center">
 
 <table>
   <tr>
-    <td><img src="screenshots/Screenshot_20251111_195718_KIZ VPN.jpg" width="250px"/><br/><b>Settings</b><br/>Subscription info: 364 days remaining</td>
-    <td><img src="screenshots/Screenshot_20251111_201131_KIZ VPN.jpg" width="250px"/><br/><b>Connection History</b><br/>Track all VPN sessions</td>
+    <td><img src="screenshots/Screenshot_20251111_195718_KIZ VPN.jpg" width="250px"/><br/><b>Настройки</b><br/>Информация о подписке: осталось 364 дня</td>
+    <td><img src="screenshots/Screenshot_20251111_201131_KIZ VPN.jpg" width="250px"/><br/><b>История подключений</b><br/>Отслеживайте все VPN сессии</td>
   </tr>
 </table>
 
 </div>
 
-### Quick Settings Tile
+### Плитка быстрых настроек
 
 <div align="center">
 
 <table>
   <tr>
-    <td><img src="screenshots/Screenshot_20251111_195816_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Active</b><br/>VPN enabled from notification shade</td>
-    <td><img src="screenshots/Screenshot_20251111_195823_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Available</b><br/>One-tap VPN control</td>
-    <td><img src="screenshots/Screenshot_20251111_195804_One UI Home.jpg" width="250px"/><br/><b>VPN Notification</b><br/>Shows subscription: 12 months remaining</td>
+    <td><img src="screenshots/Screenshot_20251111_195816_One UI Home.jpg" width="250px"/><br/><b>Быстрые настройки - Активны</b><br/>VPN включен из панели уведомлений</td>
+    <td><img src="screenshots/Screenshot_20251111_195823_One UI Home.jpg" width="250px"/><br/><b>Быстрые настройки - Доступны</b><br/>Управление VPN одним нажатием</td>
+    <td><img src="screenshots/Screenshot_20251111_195804_One UI Home.jpg" width="250px"/><br/><b>Уведомление VPN</b><br/>Показывает подписку: осталось 12 месяцев</td>
   </tr>
 </table>
 
 </div>
 
-### 🎬 Video Demo
+### 🎬 Видео демонстрация
 
 <div align="center">
 
-[📹 Watch Video Demo](media/Screen_Recording_20251111_195956_KIZ%20VPN.mp4)
+[📹 Посмотреть видео демонстрацию](media/Screen_Recording_20251111_195956_KIZ%20VPN.mp4)
 
-*Quick demonstration of VPN connection process*
+*Краткая демонстрация процесса VPN подключения*
 
-> **Note:** Click the link above to download and watch the video demo (4 MB)
+> **Примечание:** Нажмите ссылку выше чтобы скачать и посмотреть видео демо (4 MB)
 
 </div>
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Начало работы
 
-### Requirements
-- Android Studio Arctic Fox or later
-- JDK 11 or higher
-- Android SDK (minimum API 26)
+### Требования
+- Android Studio Arctic Fox или новее
+- JDK 11 или выше
+- Android SDK (минимум API 26)
 
-### Setup
+### Настройка
 
-1. **Clone the repository**
+1. **Клонируйте репозиторий**
 ```bash
-git clone https://github.com/your-username/kiz-vpn-client.git
+git clone https://github.com/eXLu51ve-gjj/kiz-vpn-client.git
 cd kiz-vpn-client
 ```
 
-2. **Configure your server settings**
+2. **Настройте параметры сервера**
 
-Edit `MainActivity.kt`:
+Отредактируйте `MainActivity.kt`:
 ```kotlin
 private val apiClient = VpnApiClient(
     baseUrl = "http://YOUR_SERVER_IP:YOUR_API_PORT",
@@ -168,7 +158,7 @@ private val apiClient = VpnApiClient(
 )
 ```
 
-Edit `VpnApiClient.kt`:
+Отредактируйте `VpnApiClient.kt`:
 ```kotlin
 class VpnApiClient(
     private val baseUrl: String = "http://YOUR_SERVER_IP:YOUR_API_PORT",
@@ -176,7 +166,7 @@ class VpnApiClient(
 )
 ```
 
-Edit `AndroidManifest.xml` (if using deep links):
+Отредактируйте `AndroidManifest.xml` (если используете deep links):
 ```xml
 <data
     android:scheme="https"
@@ -184,178 +174,178 @@ Edit `AndroidManifest.xml` (if using deep links):
     android:pathPrefix="/connect" />
 ```
 
-3. **Build the project**
+3. **Соберите проект**
 ```bash
 ./gradlew assembleDebug
 ```
 
-Or in Android Studio:
+Или в Android Studio:
 ```
 Build → Build Bundle(s) / APK(s) → Build APK(s)
 ```
 
 ---
 
-## 📖 Documentation
+## 📖 Документация
 
-- [Features List](FEATURES_LIST.md) - Complete list of features
-- [Credits](CREDITS.md) - Acknowledgments and licensing information
-
----
-
-## 🎯 Key Features Explained
-
-### Quick Settings Tile
-Toggle VPN directly from your notification shade with a single tap. The tile shows:
-- Connection status (active/inactive)
-- Subscription information (remaining days)
-
-### Subscription Management
-- Automatic subscription checking
-- Display remaining time (days/hours)
-- Integration with 3x-ui panel
-- API-based subscription verification
-
-### Multi-Protocol Support
-- **VLESS:** Full Xray-core implementation with Reality, WebSocket, TLS
-- **WireGuard:** Native implementation with high performance
+- [Список функций](FEATURES_LIST.md) - Полный список возможностей
+- [Благодарности](CREDITS.md) - Информация о лицензировании и благодарности
 
 ---
 
-## 🔧 Configuration
+## 🎯 Ключевые возможности
 
-### Importing Configs
+### Плитка быстрых настроек
+Переключайте VPN прямо из шторки уведомлений одним нажатием. Плитка показывает:
+- Статус подключения (активен/неактивен)
+- Информацию о подписке (оставшиеся дни)
 
-**Method 1: Paste from clipboard**
-- Copy your config
-- Open app → Settings → Paste Config
+### Управление подписками
+- Автоматическая проверка подписки
+- Отображение оставшегося времени (дни/часы)
+- Интеграция с 3x-ui панелью
+- Проверка подписки через API
 
-**Method 2: QR Code**
-- Open app → Scan QR Code
-- Point camera at QR code
-
-**Method 3: Deep Link**
-- Click on kizvpn:// or https:// link
-- App opens automatically with config
-
-**Method 4: Telegram Bot**
-- Get config from your bot
-- Click the link
-- App imports automatically
+### Поддержка нескольких протоколов
+- **VLESS:** Полная реализация Xray-core с Reality, WebSocket, TLS
+- **WireGuard:** Нативная реализация с высокой производительностью
 
 ---
 
-## 🏗️ Architecture
+## 🔧 Конфигурация
+
+### Импорт конфигов
+
+**Метод 1: Вставка из буфера обмена**
+- Скопируйте ваш конфиг
+- Откройте приложение → Настройки → Вставить конфиг
+
+**Метод 2: QR код**
+- Откройте приложение → Сканировать QR код
+- Наведите камеру на QR код
+
+**Метод 3: Deep Link**
+- Нажмите на kizvpn:// или https:// ссылку
+- Приложение откроется автоматически с конфигом
+
+**Метод 4: Telegram бот**
+- Получите конфиг от вашего бота
+- Нажмите на ссылку
+- Приложение импортирует автоматически
+
+---
+
+## 🏗️ Архитектура
 
 ```
 app/
-├── vpn/                  # VPN Service and Tile
-│   ├── KizVpnService     # Main VPN service
-│   └── KizVpnTileService # Quick Settings Tile
-├── ui/                   # UI Components (Jetpack Compose)
-│   ├── screens/          # App screens
-│   ├── components/       # Reusable components
+├── vpn/                  # VPN сервис и плитка
+│   ├── KizVpnService     # Основной VPN сервис
+│   └── KizVpnTileService # Плитка быстрых настроек
+├── ui/                   # UI компоненты (Jetpack Compose)
+│   ├── screens/          # Экраны приложения
+│   ├── components/       # Переиспользуемые компоненты
 │   └── viewmodel/        # ViewModels
-├── api/                  # API client
-├── config/               # Config parser
-└── xrayconfig/           # Xray configuration classes
+├── api/                  # API клиент
+├── config/               # Парсер конфигов
+└── xrayconfig/           # Классы конфигурации Xray
 ```
 
 ---
 
-## 📜 License
+## 📜 Лицензия
 
-This project is licensed under the **GPL-3.0 License** due to the use of XiVPN core code.
+Этот проект лицензирован под **GPL-3.0** в связи с использованием кода ядра XiVPN.
 
-See [LICENSE](LICENSE) for more information.
-
----
-
-## 🙏 Credits
-
-### VPN Core
-This project uses VPN core from [XiVPN](https://github.com/Exclude0122/XiVPN):
-- **Author:** Exclude0122
-- **License:** GPL-3.0
-
-#### What was taken from XiVPN:
-- `libxivpn.so` - Native library for VPN routing
-- VPN Service architecture
-- VLESS and WireGuard protocol support
-- IPC communication layer
-
-#### Our additions:
-- Modern UI/UX with Jetpack Compose
-- Quick Settings Tile
-- Subscription management system
-- 3x-ui panel integration
-- Telegram bot support
-- QR code scanner
-- Connection history
-- Multi-config management
-
-See [CREDITS.md](CREDITS.md) for detailed information.
+Подробности в [LICENSE](LICENSE).
 
 ---
 
-## 🤝 Contributing
+## 🙏 Благодарности
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### VPN ядро
+Этот проект использует VPN ядро из [XiVPN](https://github.com/Exclude0122/XiVPN):
+- **Автор:** Exclude0122
+- **Лицензия:** GPL-3.0
 
-### How to contribute:
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+#### Что взято из XiVPN:
+- `libxivpn.so` - Нативная библиотека для маршрутизации VPN
+- Архитектура VPN сервиса
+- Поддержка протоколов VLESS и WireGuard
+- Слой IPC коммуникации
+
+#### Наши дополнения:
+- Современный UI/UX на Jetpack Compose
+- Плитка быстрых настроек
+- Система управления подписками
+- Интеграция с 3x-ui панелью
+- Поддержка Telegram бота
+- Сканер QR кодов
+- История подключений
+- Управление множественными конфигами
+
+Подробная информация в [CREDITS.md](CREDITS.md).
 
 ---
 
-## 📞 Contact
+## 🤝 Вклад в проект
+
+Приветствуются любые вклады! Пожалуйста, не стесняйтесь отправлять Pull Request.
+
+### Как внести вклад:
+1. Сделайте Fork репозитория
+2. Создайте ветку для функции (`git checkout -b feature/AmazingFeature`)
+3. Закоммитьте изменения (`git commit -m 'Add some AmazingFeature'`)
+4. Отправьте в ветку (`git push origin feature/AmazingFeature`)
+5. Откройте Pull Request
+
+---
+
+## 📞 Контакты
 
 - 📧 **Email:** [nml5222600@mail.ru](mailto:nml5222600@mail.ru)
 - 💬 **Telegram:** [@eXLu51ve](https://t.me/eXLu51ve)
-- 🐙 **GitHub:** [Issues](https://github.com/your-username/kiz-vpn-client/issues)
+- 🐙 **GitHub:** [Issues](https://github.com/eXLu51ve-gjj/kiz-vpn-client/issues)
 
 ---
 
-## ⚠️ Disclaimer
+## ⚠️ Отказ от ответственности
 
-This VPN client is provided for educational and legitimate purposes only. Users are responsible for complying with all applicable laws and regulations in their jurisdiction.
-
----
-
-## 📝 Changelog
-
-### Version 1.0.0 (Current)
-- ✅ Initial release
-- ✅ VLESS and WireGuard support
-- ✅ Quick Settings Tile
-- ✅ Subscription management
-- ✅ Modern UI with Jetpack Compose
-- ✅ QR code scanner
-- ✅ Connection history
-- ✅ Multi-config support
+Этот VPN клиент предоставляется только для образовательных и легальных целей. Пользователи несут ответственность за соблюдение всех применимых законов и правил в своей юрисдикции.
 
 ---
 
-## 🔮 Roadmap
+## 📝 Список изменений
 
-- [ ] OpenVPN protocol support
-- [ ] Custom DNS settings
-- [ ] Split tunneling
-- [ ] Kill switch feature
-- [ ] Light theme
-- [ ] Widget support
-- [ ] Tasker integration
+### Версия 2.2.1 (Текущая)
+- ✅ Первый релиз
+- ✅ Поддержка VLESS и WireGuard
+- ✅ Плитка быстрых настроек
+- ✅ Управление подписками
+- ✅ Современный UI на Jetpack Compose
+- ✅ Сканер QR кодов
+- ✅ История подключений
+- ✅ Поддержка множественных конфигов
+
+---
+
+## 🔮 Планы развития
+
+- [ ] Поддержка протокола OpenVPN
+- [ ] Пользовательские настройки DNS
+- [ ] Раздельное туннелирование
+- [ ] Функция Kill Switch
+- [ ] Светлая тема
+- [ ] Поддержка виджетов
+- [ ] Интеграция с Tasker
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for the privacy-conscious**
+**Сделано с ❤️ для тех, кто ценит приватность**
 
-⭐ **Star this repo if you find it useful!** ⭐
+⭐ **Поставьте звезду если проект полезен!** ⭐
 
 </div>
 
