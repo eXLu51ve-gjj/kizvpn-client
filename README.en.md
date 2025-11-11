@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="app/src/main/res/drawable/kiz_vpn_logo.png" width="200px" alt="KIZ VPN Logo"/>
+<img src="logo.png" width="300px" alt="KIZ VPN Logo"/>
 
 # KIZ VPN
 
