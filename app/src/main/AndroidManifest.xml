@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+           <!-- Network permissions -->
+           <uses-permission android:name="android.permission.INTERNET" />
+           <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+           <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+           
+           <!-- VPN permissions -->
+           <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
+           
+           <!-- Foreground service permission (required for Android 14+) -->
+           <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+           <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+           
+           <!-- Camera for QR code scanning -->
+           <uses-permission android:name="android.permission.CAMERA" />
+           <uses-feature android:name="android.hardware.camera" android:required="false" />
+           <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+           
+           <!-- Permission for executing binaries (if needed) -->
+           <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+           
+           <!-- Notification permission (required for Android 13+) -->
+           <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+           
+           <!-- Quick Settings Tile permission -->
+           <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" />
+
+    <application
+        android:name=".KizVpnApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.KizVpn"
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
+        tools:targetApi="29">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.KizVpn"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Deep link для Telegram бота -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Схема: kizvpn:// -->
+                <data android:scheme="kizvpn" />
+            </intent-filter>
+            <!-- Альтернативная схема: https:// -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="your-domain.com"
+                    android:pathPrefix="/connect" />
+            </intent-filter>
+        </activity>
+        
+        <!-- VPN Service (старый) -->
+        <service
+            android:name=".vpn.VpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false"
+            android:enabled="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="VPN" />
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+        
+        <!-- Новый упрощенный VPN Service -->
+        <service
+            android:name=".vpn.KizVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false"
+            android:enabled="true"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="VPN" />
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+        
+        <!-- Quick Settings Tile для быстрого включения/выключения VPN -->
+        <service
+            android:name=".vpn.KizVpnTileService"
+            android:exported="true"
+            android:icon="@drawable/kiz_vpn_mono"
+            android:label="KIZ VPN"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        
+    </application>
+</manifest>
+

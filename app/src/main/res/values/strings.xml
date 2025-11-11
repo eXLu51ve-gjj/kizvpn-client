@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">KIZ VPN</string>
+    
+    <!-- Main Screen -->
+    <string name="main_title">KIZ VPN</string>
+    <string name="main_subtitle">Безопасное подключение</string>
+    <string name="add_config">Добавить конфиг</string>
+    <string name="paste_config">Вставить конфиг</string>
+    <string name="scan_qr">Сканировать QR</string>
+    <string name="connect">Подключиться</string>
+    <string name="disconnect">Отключиться</string>
+    <string name="connected">Подключено</string>
+    <string name="disconnected">Отключено</string>
+    <string name="connecting">Подключение…</string>
+    
+    <!-- Subscription -->
+    <string name="subscription_title">Подписка</string>
+    <string name="days_remaining">Осталось дней: %1$d</string>
+    <string name="expired">Подписка истекла</string>
+    <string name="unlimited">Безлимит</string>
+    
+    <!-- Config -->
+    <string name="config_hint">Вставьте конфиг VLESS или WireGuard</string>
+    <string name="config_empty">Конфиг не может быть пустым</string>
+    <string name="config_invalid">Неверный формат конфига</string>
+    <string name="config_saved">Конфиг сохранен</string>
+    
+    <!-- Settings -->
+    <string name="settings">Настройки</string>
+    <string name="about">О приложении</string>
+    
+    <!-- Errors -->
+    <string name="error_vpn_not_supported">VPN не поддерживается на этом устройстве</string>
+    <string name="error_permission_denied">Требуется разрешение VPN</string>
+    <string name="error_connection_failed">Ошибка подключения</string>
+</resources>
+
