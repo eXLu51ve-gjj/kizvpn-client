@@ -83,7 +83,56 @@
 
 ## 📱 Screenshots
 
-> Screenshots will be added soon
+### Main Interface
+
+<div align="center">
+
+<table>
+  <tr>
+    <td><img src="screenshots/Screenshot_20251111_195621_KIZ VPN.jpg" width="250px"/><br/><b>Home Screen - Disconnected</b><br/>Beautiful animated interface</td>
+    <td><img src="screenshots/Screenshot_20251111_200214_KIZ VPN.jpg" width="250px"/><br/><b>Home Screen - Connected</b><br/>Active VPN with animation</td>
+    <td><img src="screenshots/Screenshot_20251111_195753_KIZ VPN.jpg" width="250px"/><br/><b>Network Statistics</b><br/>Real-time traffic monitoring</td>
+  </tr>
+</table>
+
+</div>
+
+### Features
+
+<div align="center">
+
+<table>
+  <tr>
+    <td><img src="screenshots/Screenshot_20251111_195718_KIZ VPN.jpg" width="250px"/><br/><b>Settings</b><br/>Subscription info: 364 days remaining</td>
+    <td><img src="screenshots/Screenshot_20251111_201131_KIZ VPN.jpg" width="250px"/><br/><b>Connection History</b><br/>Track all VPN sessions</td>
+  </tr>
+</table>
+
+</div>
+
+### Quick Settings Tile
+
+<div align="center">
+
+<table>
+  <tr>
+    <td><img src="screenshots/Screenshot_20251111_195816_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Active</b><br/>VPN enabled from notification shade</td>
+    <td><img src="screenshots/Screenshot_20251111_195823_One UI Home.jpg" width="250px"/><br/><b>Quick Settings - Available</b><br/>One-tap VPN control</td>
+    <td><img src="screenshots/Screenshot_20251111_200024_One UI Home.jpg" width="250px"/><br/><b>VPN Notification</b><br/>Shows subscription: 12 months remaining</td>
+  </tr>
+</table>
+
+</div>
+
+### 🎬 Video Demo
+
+<div align="center">
+
+https://github.com/eXLu51ve-gjj/kiz-vpn-client/assets/media/Screen_Recording_20251111_195956_KIZ%20VPN.mp4
+
+*Quick demonstration of VPN connection process*
+
+</div>
 
 ---
 
