@@ -128,9 +128,11 @@
 
 <div align="center">
 
-https://github.com/eXLu51ve-gjj/kiz-vpn-client/assets/media/Screen_Recording_20251111_195956_KIZ%20VPN.mp4
+[📹 Watch Video Demo](media/Screen_Recording_20251111_195956_KIZ%20VPN.mp4)
 
 *Quick demonstration of VPN connection process*
+
+> **Note:** Click the link above to download and watch the video demo (4 MB)
 
 </div>
 
