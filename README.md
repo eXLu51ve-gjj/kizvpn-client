@@ -45,13 +45,13 @@
 
 ### Latest Release
 
-[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/your-username/kiz-vpn-client/releases/latest)
+[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
 
-**Current Version:** v1.0.0  
-**Size:** ~161 MB  
+**Current Version:** v2.2.1  
+**Size:** ~162 MB  
 **Min Android:** 8.0 (API 26)
 
-[📦 Download Latest APK](https://github.com/your-username/kiz-vpn-client/releases/latest/download/KIZ_VPN.apk)
+[📦 Download Latest APK](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest/download/KIZ_VPN.public.2.2.1.apk)
 
 ### Installation
 
