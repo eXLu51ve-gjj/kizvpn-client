@@ -3953,10 +3953,10 @@ fun VpnConfigModal(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                            .padding(12.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 // Галочка слева для активного конфига
                                                 if (savedConfig.isActive) {
                                                     androidx.compose.material3.Icon(
@@ -3979,7 +3979,7 @@ fun VpnConfigModal(
                                                             com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD -> "WireGuard конфиг"
                                                             else -> "Конфиг"
                                                         },
-                            style = MaterialTheme.typography.bodyMedium,
+                                                        style = MaterialTheme.typography.bodyMedium,
                                                         color = Color.White.copy(alpha = 0.9f),
                                                         fontFamily = zenterFontFamily
                                                     )
@@ -4078,7 +4078,8 @@ fun VpnConfigModal(
                                         }
                                     }
                                 }
-                            } // Конец Card с сохраненными конфигами
+                            } // Column внутри Card
+                        } // Конец Card с сохраненными конфигами
                         
                         // Spacer для визуального разделения между Card и кнопками
                         Spacer(modifier = Modifier.height(20.dp))
@@ -4510,7 +4511,8 @@ fun VpnConfigModal(
                                     androidx.compose.material3.Text("Сохранить", color = Color.White)
                                 }
                             }
-                        }
+                            Spacer(modifier = Modifier.height(20.dp))
+                        } // if (configType == 1)
                         
                         // Сообщение об ошибке
                         if (errorMessage != null) {
@@ -4554,13 +4556,18 @@ fun VpnConfigModal(
                 } // Box (внутренний)
             } // Card
             
-            // Кнопка "Закрыть" как в NetworkStatsModal – снаружи контента
-            CloseButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
-            )
+            // Кнопка "Закрыть" как в RoutingModal – снаружи контента
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                CloseButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .padding(bottom = 16.dp)
+                )
+            }
         } // Box (модальное окно)
+        } // Box (внешний для модального окна)
     } // if (isVisible || showVpnConfig)
 } // VpnConfigModal
