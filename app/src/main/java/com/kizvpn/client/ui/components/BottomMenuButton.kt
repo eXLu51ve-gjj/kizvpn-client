@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import android.content.Context
 import androidx.compose.runtime.*
@@ -396,72 +398,23 @@ fun AboutModal(
         }
     }
     
-    // Создаем состояние анимации для модального окна
-    val animationState = remember { MenuItemAnimationState() }
-    
     // Управление видимостью overlay
     var isVisible by remember { mutableStateOf(false) }
     
-    // Анимация фона
+    // Анимация фона (как у капсул)
     val backgroundAlpha by animateFloatAsState(
-        targetValue = if (showAbout) 0.7f else 0f,
-        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        targetValue = if (showAbout) 0.4f else 0f,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "about_background_alpha"
     )
     
-    // Управление анимациями
+    // Управление видимостью для анимации
     LaunchedEffect(showAbout) {
         if (showAbout) {
             isVisible = true
-            // Анимация открытия (медленное появление из центра с масштабированием)
-            coroutineScope.launch {
-                // Начинаем с маленького размера и невидимого
-                animationState.scale.snapTo(0.8f)
-                animationState.opacity.snapTo(0f)
-                
-                launch {
-                    animationState.scale.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(
-                            durationMillis = 400,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
-                }
-                launch {
-                    animationState.opacity.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(
-                            durationMillis = 400,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
-                }
-            }
         } else {
-            // Анимация закрытия (плавное затухание)
-            coroutineScope.launch {
-                launch {
-                    animationState.opacity.animateTo(
-                        targetValue = 0f,
-                        animationSpec = tween(
-                            durationMillis = 300,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
-                }
-                launch {
-                    animationState.scale.animateTo(
-                        targetValue = 0.9f,
-                        animationSpec = tween(
-                            durationMillis = 300,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
-                }
-                delay(300)
-                isVisible = false
-            }
+            delay(400) // Ждем завершения анимации закрытия
+            isVisible = false
         }
     }
     
@@ -470,7 +423,7 @@ fun AboutModal(
         try {
             val intent = Intent(Intent.ACTION_SENDTO).apply {
                 data = Uri.parse("mailto:")
-                putExtra(Intent.EXTRA_EMAIL, arrayOf("your-email@example.com"))
+                putExtra(Intent.EXTRA_EMAIL, arrayOf("nml5222600@mail.ru"))
                 putExtra(Intent.EXTRA_SUBJECT, "")
             }
             context.startActivity(Intent.createChooser(intent, "Открыть почту"))
@@ -481,12 +434,12 @@ fun AboutModal(
     
     val openTelegram = {
         try {
-            val telegramIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/your_telegram"))
+            val telegramIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/eXLu51ve"))
             context.startActivity(telegramIntent)
         } catch (e: Exception) {
             // Если не удалось открыть Telegram, пытаемся через браузер
             try {
-                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/your_telegram"))
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/eXLu51ve"))
                 context.startActivity(browserIntent)
             } catch (e2: Exception) {
                 e2.printStackTrace()
@@ -528,42 +481,75 @@ fun AboutModal(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(9999f), // Очень высокий zIndex, чтобы быть поверх всего
+                .zIndex(1002f)
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp), // Как у "Подписки"
             contentAlignment = Alignment.Center
         ) {
-            // Используем простой Box без rotation для AboutModal
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .fillMaxHeight(0.85f)
-                    .alpha(animationState.opacity.value)
-                    .scale(animationState.scale.value)
-        ) {
-            Card(
-                modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF2C2C2E) // Темно-серый фон
+            // Анимация выезда справа в центр (как у капсул)
+            AnimatedVisibility(
+                visible = showAbout,
+                enter = slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(
+                        durationMillis = 500,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(
+                        durationMillis = 500,
+                        easing = FastOutSlowInEasing
+                    )
                 ),
-                    shape = MaterialTheme.shapes.large, // Закругленные углы
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                exit = slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
             ) {
-                Column(
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .clickable(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onDismiss()
+                            }
+                        ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.75f) // Фон как у капсул
+                    ),
+                    shape = MaterialTheme.shapes.large, // Закругленные углы
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                Box(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight()
                             .verticalScroll(rememberScrollState())
-                            .padding(24.dp),
+                            .padding(16.dp), // Компактнее: было 24.dp
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp) // Компактнее: было 16.dp
                     ) {
                         // Заголовок "KIZ VPN" (мягкий синий) с легкой обводкой
                         androidx.compose.material3.Text(
                             text = "KIZ VPN",
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 24.sp,
+                                fontSize = 20.sp, // Компактнее: было 24.sp
                                 fontWeight = FontWeight.Bold,
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.3f),
@@ -580,7 +566,7 @@ fun AboutModal(
                             text = "Ваша анонимность и безопасность в сети",
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 16.sp,
+                                fontSize = 14.sp, // Компактнее: было 16.sp
                                 fontWeight = FontWeight.Medium,
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.3f),
@@ -599,7 +585,7 @@ fun AboutModal(
                             text = "Простой и бесплатный VPN для защиты вашего подключения к интернету.\n\nОбеспечивает анонимность и безопасность, чтобы вы могли серфить в сети спокойно.",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp, // Компактнее: было 14.sp
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.3f),
                                     offset = androidx.compose.ui.geometry.Offset(1f, 1f),
@@ -618,7 +604,7 @@ fun AboutModal(
                             text = "Что мы предлагаем",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 18.sp,
+                                fontSize = 16.sp, // Компактнее: было 18.sp
                                 fontWeight = FontWeight.Bold,
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.4f),
@@ -639,7 +625,7 @@ fun AboutModal(
                                 text = "Защита приватности: Ваши данные под надёжной защитой.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
+                                    fontSize = 12.sp, // Компактнее: было 14.sp
                                     shadow = androidx.compose.ui.graphics.Shadow(
                                         color = Color.Black.copy(alpha = 0.3f),
                                         offset = androidx.compose.ui.geometry.Offset(1f, 1f),
@@ -653,7 +639,7 @@ fun AboutModal(
                                 text = "Высокая скорость: Стабильное и быстрое соединение.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
+                                    fontSize = 12.sp, // Компактнее: было 14.sp
                                     shadow = androidx.compose.ui.graphics.Shadow(
                                         color = Color.Black.copy(alpha = 0.3f),
                                         offset = androidx.compose.ui.geometry.Offset(1f, 1f),
@@ -667,7 +653,7 @@ fun AboutModal(
                                 text = "Полностью бесплатно: Никаких скрытых платежей.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
+                                    fontSize = 12.sp, // Компактнее: было 14.sp
                                     shadow = androidx.compose.ui.graphics.Shadow(
                                         color = Color.Black.copy(alpha = 0.3f),
                                         offset = androidx.compose.ui.geometry.Offset(1f, 1f),
@@ -681,7 +667,7 @@ fun AboutModal(
                                 text = "Простота в использовании: Подключение одним нажатием.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
+                                    fontSize = 12.sp, // Компактнее: было 14.sp
                                     shadow = androidx.compose.ui.graphics.Shadow(
                                         color = Color.Black.copy(alpha = 0.3f),
                                         offset = androidx.compose.ui.geometry.Offset(1f, 1f),
@@ -700,7 +686,7 @@ fun AboutModal(
                             text = "Важно",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 18.sp,
+                                fontSize = 16.sp, // Компактнее: было 18.sp
                                 fontWeight = FontWeight.Bold,
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.4f),
@@ -735,7 +721,7 @@ fun AboutModal(
                             text = "Связь с разработчиком",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
-                                fontSize = 18.sp,
+                                fontSize = 16.sp, // Компактнее: было 18.sp
                                 fontWeight = FontWeight.Bold,
                                 shadow = androidx.compose.ui.graphics.Shadow(
                                     color = Color.Black.copy(alpha = 0.4f),
@@ -751,73 +737,102 @@ fun AboutModal(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Кликабельный Email с тенью
-                            androidx.compose.material3.Text(
-                                text = "Email: your-email@example.com",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
-                                    shadow = androidx.compose.ui.graphics.Shadow(
-                                        color = Color.Black.copy(alpha = 0.3f),
-                                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                        blurRadius = 2f
+                            // Кликабельный Email с иконкой
+                            Row(
+                                modifier = Modifier
+                                    .clickable(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            openEmail()
+                                        }
                                     )
-                                ),
-                                color = Color(0xFF5B9BD5),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.clickable(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        openEmail()
-                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Default.Email,
+                                    contentDescription = "Email",
+                                    tint = Color(0xFF5B9BD5),
+                                    modifier = Modifier.size(18.dp)
                                 )
-                            )
-                            // Кликабельный Telegram с тенью
-                            androidx.compose.material3.Text(
-                                text = "Telegram: @your_telegram",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = FontFamily.Default,
-                                    fontSize = 14.sp,
-                                    shadow = androidx.compose.ui.graphics.Shadow(
-                                        color = Color.Black.copy(alpha = 0.3f),
-                                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                        blurRadius = 2f
+                                Spacer(modifier = Modifier.width(8.dp))
+                                androidx.compose.material3.Text(
+                                    text = "nml5222600@mail.ru",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = FontFamily.Default,
+                                        fontSize = 12.sp,
+                                        shadow = androidx.compose.ui.graphics.Shadow(
+                                            color = Color.Black.copy(alpha = 0.3f),
+                                            offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                            blurRadius = 2f
+                                        )
+                                    ),
+                                    color = Color(0xFF5B9BD5),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            // Кликабельный Telegram с иконкой
+                            Row(
+                                modifier = Modifier
+                                    .clickable(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            openTelegram()
+                                        }
                                     )
-                                ),
-                                color = Color(0xFF5B9BD5),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.clickable(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        openTelegram()
-                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Default.Send,
+                                    contentDescription = "Telegram",
+                                    tint = Color(0xFF5B9BD5),
+                                    modifier = Modifier.size(18.dp)
                                 )
-                            )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                androidx.compose.material3.Text(
+                                    text = "@eXLu51ve",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = FontFamily.Default,
+                                        fontSize = 12.sp,
+                                        shadow = androidx.compose.ui.graphics.Shadow(
+                                            color = Color.Black.copy(alpha = 0.3f),
+                                            offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                            blurRadius = 2f
+                                        )
+                                    ),
+                                    color = Color(0xFF5B9BD5),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // Версия сборки (внизу по центру) с легкой обводкой
-                        androidx.compose.material3.Text(
-                            text = "Версия $versionName",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Default,
-                                fontSize = 11.sp,
-                                shadow = androidx.compose.ui.graphics.Shadow(
-                                    color = Color.Black.copy(alpha = 0.3f),
-                                    offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                    blurRadius = 2f
-                                )
-                            ),
-                            color = Color.White.copy(alpha = 0.5f),
-                            textAlign = TextAlign.Center
-                        )
-                        
-                        // Ник разработчика (красный, справа) с легкой обводкой
+                        // Версия сборки и ник разработчика в одной строке
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Версия сборки (слева) с легкой обводкой
+                            androidx.compose.material3.Text(
+                                text = "Версия $versionName",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Default,
+                                    fontSize = 11.sp,
+                                    shadow = androidx.compose.ui.graphics.Shadow(
+                                        color = Color.Black.copy(alpha = 0.3f),
+                                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                        blurRadius = 2f
+                                    )
+                                ),
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            
+                            // Ник разработчика (красный, справа) с легкой обводкой
                             androidx.compose.material3.Text(
                                 text = "eXLu51ve",
                                 style = MaterialTheme.typography.bodySmall.copy(
@@ -830,25 +845,15 @@ fun AboutModal(
                                         blurRadius = 2f
                                     )
                                 ),
-                                color = Color(0xFFFF3B30)
+                                color = Color(0xFFFF3B30) // Красный цвет
                             )
                         }
                         
-                        Spacer(modifier = Modifier.height(60.dp)) // Отступ для кнопки закрытия
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
-            
-            // Кнопка закрытия жестко закреплена к низу модального окна
-            CloseButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDismiss()
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
-            )
+            }
         }
     }
 }
