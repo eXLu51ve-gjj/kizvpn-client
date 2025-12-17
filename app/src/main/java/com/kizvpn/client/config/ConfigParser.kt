@@ -101,10 +101,21 @@ class ConfigParser {
                 val params = paramsString.split("&")
                 
                 for (param in params) {
+                    if (param.isBlank()) continue
+                    
                     val keyValue = param.split("=", limit = 2)
-                    if (keyValue.size == 2) {
+                    if (keyValue.size >= 1) {
                         val key = keyValue[0]
-                        val value = java.net.URLDecoder.decode(keyValue[1], "UTF-8")
+                        // Значение может отсутствовать (пустой параметр) или быть закодированным
+                        val value = if (keyValue.size >= 2 && keyValue[1].isNotBlank()) {
+                            try {
+                                java.net.URLDecoder.decode(keyValue[1], "UTF-8")
+                            } catch (e: Exception) {
+                                keyValue[1] // Если декодирование не удалось, используем как есть
+                            }
+                        } else {
+                            "" // Пустое значение
+                        }
                         
                         when (key.lowercase()) {
                             "type" -> network = value

@@ -27,6 +27,8 @@ import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import com.kizvpn.client.ui.theme.BackgroundDark
 import com.kizvpn.client.ui.theme.TextPrimary
 import com.kizvpn.client.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,7 +37,9 @@ fun QRCodeScreen(
     onConfigScanned: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var scannedConfig by remember { mutableStateOf<String?>(null) }
+    var isProcessing by remember { mutableStateOf(false) }
     var hasCameraPermission by remember { 
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -96,47 +100,80 @@ fun QRCodeScreen(
                         val formats = listOf(BarcodeFormat.QR_CODE)
                         barcodeView.decoderFactory = DefaultDecoderFactory(formats)
                         
+                        // Атомарный флаг для предотвращения повторной обработки
+                        val processingRef = java.util.concurrent.atomic.AtomicBoolean(false)
+                        
                         // Обработка результатов сканирования
-                        var isProcessing = false
                         barcodeView.decodeContinuous(object : BarcodeCallback {
                             override fun barcodeResult(result: BarcodeResult?) {
                                 result?.let {
                                     val scannedText = it.text
                                     Log.d("QRCodeScreen", "QR-код отсканирован: ${scannedText?.take(50)}...")
                                     
-                                    if (scannedText != null && scannedText.isNotBlank() && !isProcessing) {
-                                        isProcessing = true
-                                        
-                                        try {
-                                            barcodeView.pause()
-                                            
-                                            scannedConfig = scannedText
-                                            Log.d("QRCodeScreen", "Вызываем onConfigScanned")
-                                            
-                                            // Показываем уведомление
-                                            Toast.makeText(
-                                                context,
-                                                "QR-код отсканирован!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            
-                                            // Вызываем callback
-                                            onConfigScanned(scannedText)
-                                            
-                                            // Закрываем экран после небольшой задержки
-                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                                Log.d("QRCodeScreen", "Закрываем экран")
-                                                onBack()
-                                            }, 1000)
-                                        } catch (e: Exception) {
-                                            Log.e("QRCodeScreen", "Ошибка при обработке QR-кода", e)
-                                            Toast.makeText(
-                                                context,
-                                                "Ошибка: ${e.message}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                            isProcessing = false
-                                            barcodeView.resume()
+                                    // Проверяем, что текст не пустой и обработка еще не началась
+                                    if (scannedText != null && scannedText.isNotBlank()) {
+                                        // Проверяем атомарно, не обрабатывается ли уже QR-код
+                                        if (processingRef.compareAndSet(false, true)) {
+                                            try {
+                                                // Останавливаем сканирование
+                                                barcodeView.pause()
+                                                
+                                                Log.d("QRCodeScreen", "Обрабатываем отсканированный QR-код")
+                                                
+                                                // Выполняем обработку в главном потоке через корутину
+                                                scope.launch {
+                                                    try {
+                                                        // Показываем уведомление
+                                                        Toast.makeText(
+                                                            context,
+                                                            "QR-код отсканирован!",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        
+                                                        // Сохраняем отсканированный конфиг
+                                                        scannedConfig = scannedText
+                                                        
+                                                        // Вызываем callback для обработки конфига
+                                                        Log.d("QRCodeScreen", "Вызываем onConfigScanned")
+                                                        onConfigScanned(scannedText)
+                                                        
+                                                        // Даем время на обработку конфига перед закрытием
+                                                        delay(800)
+                                                        
+                                                        // Закрываем экран
+                                                        Log.d("QRCodeScreen", "Закрываем экран")
+                                                        onBack()
+                                                    } catch (e: Exception) {
+                                                        Log.e("QRCodeScreen", "Ошибка при обработке QR-кода", e)
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Ошибка: ${e.message ?: "Неизвестная ошибка"}",
+                                                            Toast.LENGTH_LONG
+                                                        ).show()
+                                                        
+                                                        // Сбрасываем флаг и возобновляем сканирование
+                                                        processingRef.set(false)
+                                                        barcodeView.resume()
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("QRCodeScreen", "Критическая ошибка при обработке QR-кода", e)
+                                                Toast.makeText(
+                                                    context,
+                                                    "Критическая ошибка: ${e.message ?: "Неизвестная ошибка"}",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                                
+                                                // Сбрасываем флаг и возобновляем сканирование
+                                                processingRef.set(false)
+                                                try {
+                                                    barcodeView.resume()
+                                                } catch (ex: Exception) {
+                                                    Log.e("QRCodeScreen", "Не удалось возобновить сканирование", ex)
+                                                }
+                                            }
+                                        } else {
+                                            Log.d("QRCodeScreen", "QR-код уже обрабатывается, игнорируем повторное сканирование")
                                         }
                                     }
                                 }
@@ -152,10 +189,14 @@ fun QRCodeScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                     update = { view ->
-                        // Обновление не требуется, но можно добавить при необходимости
+                        // Обновление не требуется
                     },
                     onRelease = { view ->
-                        view.pause()
+                        try {
+                            view.pause()
+                        } catch (e: Exception) {
+                            Log.e("QRCodeScreen", "Ошибка при освобождении камеры", e)
+                        }
                     }
                 )
             } else {

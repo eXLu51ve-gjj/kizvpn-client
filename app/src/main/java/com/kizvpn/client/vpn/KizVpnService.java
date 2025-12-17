@@ -90,6 +90,8 @@ public class KizVpnService extends VpnService implements SocketProtect {
     // Информация о подписке для отображения в уведомлении
     private int subscriptionDays = 0;
     private int subscriptionHours = 0;
+    private long subscriptionUsedTraffic = -1;
+    private long subscriptionTotalTraffic = -1;
     
     private static final String CHANNEL_ID = "kiz_vpn_service";
     private static final int NOTIFICATION_ID = 2; // Изменено для принудительного создания нового уведомления
@@ -133,6 +135,14 @@ public class KizVpnService extends VpnService implements SocketProtect {
             Log.i(TAG, "Loaded subscription info: " + subscriptionDays + " days, " + subscriptionHours + " hours");
         } else {
             Log.i(TAG, "No subscription info found in preferences");
+        }
+        
+        // Загружаем данные о трафике
+        if (prefs.contains("subscription_used_traffic")) {
+            this.subscriptionUsedTraffic = prefs.getLong("subscription_used_traffic", -1);
+        }
+        if (prefs.contains("subscription_total_traffic")) {
+            this.subscriptionTotalTraffic = prefs.getLong("subscription_total_traffic", -1);
         }
     }
     
@@ -275,16 +285,20 @@ public class KizVpnService extends VpnService implements SocketProtect {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
+                // Для foreground service всегда используем IMPORTANCE_LOW (минимальный уровень для foreground)
+                // IMPORTANCE_NONE нельзя использовать для foreground service - это вызывает краш
+                int importance = NotificationManager.IMPORTANCE_LOW;
+                
                 // Проверяем, существует ли канал
                 NotificationChannel existingChannel = manager.getNotificationChannel(CHANNEL_ID);
                 if (existingChannel != null) {
                     Log.i(TAG, "Notification channel already exists: " + CHANNEL_ID);
                     // Если канал существует с другой важностью, удаляем и пересоздаем
-                    if (existingChannel.getImportance() != NotificationManager.IMPORTANCE_LOW) {
-                        Log.i(TAG, "Channel has different importance, deleting and recreating...");
+                    if (existingChannel.getImportance() != importance) {
+                        Log.i(TAG, "Channel has different importance (" + existingChannel.getImportance() + " vs " + importance + "), deleting and recreating...");
                         manager.deleteNotificationChannel(CHANNEL_ID);
                     } else {
-                        Log.i(TAG, "Channel is already set to IMPORTANCE_LOW, using existing channel");
+                        Log.i(TAG, "Channel is already set to importance " + importance + ", using existing channel");
                         return; // Канал уже настроен правильно
                     }
                 }
@@ -293,7 +307,7 @@ public class KizVpnService extends VpnService implements SocketProtect {
                 NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "KIZ VPN Service",
-                    NotificationManager.IMPORTANCE_LOW // LOW - показывает иконку, но без звука
+                    importance // Всегда LOW для foreground service
                 );
                 channel.setDescription("VPN connection status");
                 channel.setShowBadge(false); // Не показывать значок
@@ -343,6 +357,9 @@ public class KizVpnService extends VpnService implements SocketProtect {
      */
     private boolean startVPN() {
         Log.i(TAG, "=== startVPN() called - creating VPN interface ===");
+        
+        // Создаем/обновляем канал уведомлений в зависимости от настроек
+        createNotificationChannel();
         
         // Загружаем информацию о подписке из SharedPreferences
         loadSubscriptionInfo();
@@ -396,23 +413,53 @@ public class KizVpnService extends VpnService implements SocketProtect {
         
         Log.i(TAG, "Using mono logo icon resource ID: " + iconResId);
         
+        // Проверяем настройку уведомлений
+        android.content.SharedPreferences prefs = getSharedPreferences("vpn_settings", MODE_PRIVATE);
+        boolean notificationsEnabled = prefs.getBoolean("notifications_enabled", true);
+        
         // Формируем текст с информацией о подписке
         String contentText = "VPN подключен";
-        if (subscriptionDays > 0 || subscriptionHours > 0) {
+        StringBuilder textBuilder = new StringBuilder();
+        
+        // Добавляем информацию о времени подписки
+        if (notificationsEnabled && (subscriptionDays > 0 || subscriptionHours > 0)) {
+            textBuilder.append("Осталось: • ");
+            
             if (subscriptionDays > 0) {
                 int months = subscriptionDays / 30;
                 int remainingDays = subscriptionDays % 30;
                 if (months > 0 && remainingDays > 0) {
-                    contentText = String.format("Осталось: %d мес. %d дн.", months, remainingDays);
+                    textBuilder.append(String.format("%d мес. %d дн.", months, remainingDays));
                 } else if (months > 0) {
-                    contentText = String.format("Осталось: %d мес.", months);
+                    textBuilder.append(String.format("%d мес.", months));
                 } else {
-                    contentText = String.format("Осталось: %d дн.", subscriptionDays);
+                    textBuilder.append(String.format("%d дн.", subscriptionDays));
+                    // Добавляем часы, если они есть
+                    if (subscriptionHours > 0) {
+                        textBuilder.append(String.format(" %d ч.", subscriptionHours));
+                    }
                 }
             } else {
-                contentText = String.format("Осталось: %d ч.", subscriptionHours);
+                textBuilder.append(String.format("%d ч.", subscriptionHours));
             }
         }
+        
+        // Добавляем информацию о трафике
+        String trafficText = formatTrafficForNotification();
+        if (trafficText != null) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(trafficText);
+        }
+        
+        if (textBuilder.length() > 0) {
+            contentText = textBuilder.toString();
+        }
+        
+        // Выбираем приоритет и видимость в зависимости от настроек
+        int priority = notificationsEnabled ? NotificationCompat.PRIORITY_LOW : NotificationCompat.PRIORITY_MIN;
+        int visibility = notificationsEnabled ? NotificationCompat.VISIBILITY_PUBLIC : NotificationCompat.VISIBILITY_SECRET;
         
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("KIZ VPN")
@@ -423,8 +470,8 @@ public class KizVpnService extends VpnService implements SocketProtect {
             .setLargeIcon(transparentBitmap != null ? transparentBitmap : BitmapFactory.decodeResource(getResources(), R.drawable.kiz_vpn2)) // Монохромный логотип без фона в уведомлении
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW) // LOW приоритет - показывает иконку, но не звук
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Показывает содержимое уведомления
+            .setPriority(priority) // Зависит от настроек
+            .setVisibility(visibility) // Зависит от настроек
             .setAutoCancel(false)
             .build();
         
@@ -437,6 +484,20 @@ public class KizVpnService extends VpnService implements SocketProtect {
             startForeground(NOTIFICATION_ID, notification);
         }
         Log.i(TAG, "=== Foreground service started with icon ID: " + R.drawable.kiz_vpn_mono + " ===");
+        
+        // Если уведомления выключены, скрываем уведомление из шторки после запуска foreground service
+        if (!notificationsEnabled) {
+            // Используем stopForeground(false) чтобы отделить сервис от уведомления, но оставить сервис foreground
+            // Затем отменяем уведомление через NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(false); // Отделяем сервис от уведомления, но оставляем сервис foreground
+            }
+            // Отменяем уведомление через NotificationManager (используем уже существующую переменную)
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+                Log.i(TAG, "Notification removed from notification shade (notifications disabled)");
+            }
+        }
         
         // Создаем VPN интерфейс
         try {
@@ -739,24 +800,66 @@ public class KizVpnService extends VpnService implements SocketProtect {
      * Обновить уведомление с текущей информацией о подписке
      */
     private void updateNotification() {
+        // Проверяем настройку уведомлений
+        android.content.SharedPreferences prefs = getSharedPreferences("vpn_settings", MODE_PRIVATE);
+        boolean notificationsEnabled = prefs.getBoolean("notifications_enabled", true);
+        
+        // Если уведомления выключены, отменяем уведомление
+        if (!notificationsEnabled) {
+            NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+                Log.i(TAG, "Notification cancelled (notifications disabled)");
+            }
+            // Отделяем сервис от уведомления, но оставляем сервис foreground
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(false);
+            }
+            return;
+        }
+        
+        // Если уведомления включены, показываем полную информацию
         // Формируем текст с информацией о подписке
         String contentText = "VPN подключен";
+        StringBuilder textBuilder = new StringBuilder();
+        
+        // Добавляем информацию о времени подписки
         if (subscriptionDays > 0 || subscriptionHours > 0) {
+            textBuilder.append("Осталось: • ");
+            
             if (subscriptionDays > 0) {
                 int months = subscriptionDays / 30;
                 int remainingDays = subscriptionDays % 30;
                 if (months > 0 && remainingDays > 0) {
-                    contentText = String.format("Осталось: %d мес. %d дн.", months, remainingDays);
+                    textBuilder.append(String.format("%d мес. %d дн.", months, remainingDays));
                 } else if (months > 0) {
-                    contentText = String.format("Осталось: %d мес.", months);
+                    textBuilder.append(String.format("%d мес.", months));
                 } else {
-                    contentText = String.format("Осталось: %d дн.", subscriptionDays);
+                    textBuilder.append(String.format("%d дн.", subscriptionDays));
+                    // Добавляем часы, если они есть
+                    if (subscriptionHours > 0) {
+                        textBuilder.append(String.format(" %d ч.", subscriptionHours));
+                    }
                 }
             } else {
-                contentText = String.format("Осталось: %d ч.", subscriptionHours);
+                textBuilder.append(String.format("%d ч.", subscriptionHours));
             }
         }
         
+        // Добавляем информацию о трафике
+        String trafficText = formatTrafficForNotification();
+        if (trafficText != null) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(trafficText);
+        }
+        
+        if (textBuilder.length() > 0) {
+            contentText = textBuilder.toString();
+        }
+        
+        // Канал уже создан с IMPORTANCE_LOW в startVPN() или onCreate()
         // Создаем intent для открытия приложения
         Intent notificationIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
@@ -1120,5 +1223,57 @@ public class KizVpnService extends VpnService implements SocketProtect {
             return KizVpnService.this;
         }
     }
+    
+    /**
+     * Форматирует трафик в удобочитаемый вид (с точностью до 2 знаков после запятой для MB, GB, TB)
+     */
+    private String formatBytes(long bytes) {
+        double kb = bytes / 1024.0;
+        double mb = kb / 1024.0;
+        double gb = mb / 1024.0;
+        double tb = gb / 1024.0;
+        
+        java.util.Locale locale = java.util.Locale.getDefault();
+        String formatted;
+        
+        if (tb >= 1.0) {
+            formatted = String.format(locale, "%.2f TB", tb);
+        } else if (gb >= 1.0) {
+            formatted = String.format(locale, "%.2f GB", gb);
+        } else if (mb >= 1.0) {
+            formatted = String.format(locale, "%.2f MB", mb);
+        } else if (kb >= 1.0) {
+            formatted = String.format(locale, "%.2f KB", kb);
+        } else {
+            return bytes + " B";
+        }
+        
+        // Заменяем точку на запятую для русской локали
+        if (locale.getLanguage().equals("ru") && formatted.contains(".")) {
+            return formatted.replace(".", ",");
+        }
+        return formatted;
+    }
+    
+    /**
+     * Форматирует трафик в формате "45.79 MB / 50 GB" (использовано / всего)
+     */
+    private String formatTrafficForNotification() {
+        if (subscriptionUsedTraffic < 0) {
+            return null;
+        }
+        
+        String usedText = formatBytes(subscriptionUsedTraffic);
+        String totalText;
+        
+        if (subscriptionTotalTraffic > 0) {
+            totalText = formatBytes(subscriptionTotalTraffic);
+        } else {
+            totalText = "∞";
+        }
+        
+        return usedText + " / " + totalText;
+    }
 }
+
 

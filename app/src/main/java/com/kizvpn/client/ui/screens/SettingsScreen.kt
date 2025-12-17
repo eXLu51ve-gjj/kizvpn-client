@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,7 @@ import com.kizvpn.client.ui.theme.TextSecondary
 import com.kizvpn.client.ui.theme.CardDark
 import com.kizvpn.client.data.SubscriptionInfo
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,17 +36,51 @@ fun SettingsScreen(
     onBack: () -> Unit,
     subscriptionInfo: SubscriptionInfo? = null,
     onLogout: () -> Unit = {},
-    context: Context? = null
+    context: Context? = null,
+    onSubscriptionUrlCheck: ((String) -> Unit)? = null  // Callback для проверки subscription URL
 ) {
-    var useAutoConnect by remember { mutableStateOf(false) }
-    var useNotifications by remember { mutableStateOf(true) }
+    // Загружаем количество конфигов из SharedPreferences
+    val configsCount = remember {
+        if (context != null) {
+            val prefs = context.getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+            prefs.getInt("subscription_configs_count", 0)
+        } else 0
+    }
+    // Загружаем сохраненные настройки
+    var useAutoConnect by remember {
+        mutableStateOf(
+            if (context != null) {
+                val prefs = context.getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+                prefs.getBoolean("auto_connect", false)
+            } else false
+        )
+    }
+    var useNotifications by remember {
+        mutableStateOf(
+            if (context != null) {
+                val prefs = context.getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+                prefs.getBoolean("notifications_enabled", true) // По умолчанию включены
+            } else true
+        )
+    }
+    val scope = rememberCoroutineScope()
     
     // Отображаем актуальное значение подписки
     var currentSubscriptionInfo by remember { mutableStateOf(subscriptionInfo) }
     
-    // Обновляем при изменении subscriptionInfo
+    // Состояние для subscription URL
+    var subscriptionUrl by remember { mutableStateOf("") }
+    var isCheckingSubscriptionUrl by remember { mutableStateOf(false) }
+    var subscriptionUrlError by remember { mutableStateOf<String?>(null) }
+    var showSubscriptionUrlInput by remember { mutableStateOf(false) }
+    
+    // Обновляем при изменении subscriptionInfo (включая обновления после проверки URL)
     LaunchedEffect(subscriptionInfo) {
         currentSubscriptionInfo = subscriptionInfo
+        // Если subscriptionInfo обновился и мы проверяли URL, сбрасываем состояние загрузки
+        if (subscriptionInfo != null && isCheckingSubscriptionUrl) {
+            isCheckingSubscriptionUrl = false
+        }
     }
 
     Column(
@@ -52,6 +88,8 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(BackgroundDark)
     ) {
+        var showSubscriptionUrlDialog by remember { mutableStateOf(false) }
+        
         TopAppBar(
             title = { 
                 Text(
@@ -60,18 +98,132 @@ fun SettingsScreen(
                 ) 
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "Назад",
-                        tint = TextPrimary
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = TextPrimary
+                        )
+                    }
+                    TextButton(
+                        onClick = { showSubscriptionUrlDialog = true },
+                        modifier = Modifier.padding(horizontal = 0.dp)
+                    ) {
+                        Text(
+                            text = "Sub",
+                            color = NeonPrimary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = BackgroundDark
             )
         )
+        
+        // Диалог для ввода Subscription URL
+        if (showSubscriptionUrlDialog) {
+            var dialogSubscriptionUrl by remember { mutableStateOf("") }
+            var dialogError by remember { mutableStateOf<String?>(null) }
+            var isChecking by remember { mutableStateOf(false) }
+            
+            AlertDialog(
+                onDismissRequest = { 
+                    showSubscriptionUrlDialog = false
+                    dialogSubscriptionUrl = ""
+                    dialogError = null
+                },
+                title = {
+                    Text(
+                        "Проверить Subscription URL",
+                        color = TextPrimary
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = dialogSubscriptionUrl,
+                            onValueChange = { 
+                                dialogSubscriptionUrl = it
+                                dialogError = null
+                            },
+                            label = { Text("Subscription URL", color = TextSecondary) },
+                            placeholder = { Text("https://host.kizvpn.ru/sub/...", color = TextSecondary.copy(alpha = 0.5f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = NeonPrimary,
+                                unfocusedBorderColor = TextSecondary.copy(alpha = 0.3f),
+                                focusedLabelColor = TextSecondary,
+                                unfocusedLabelColor = TextSecondary
+                            ),
+                            enabled = !isChecking,
+                            singleLine = true
+                        )
+                        
+                        if (dialogError != null) {
+                            Text(
+                                text = dialogError ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StatusDisconnected
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (dialogSubscriptionUrl.isNotBlank()) {
+                                isChecking = true
+                                dialogError = null
+                                onSubscriptionUrlCheck?.invoke(dialogSubscriptionUrl.trim())
+                                // Закрываем диалог через небольшую задержку
+                                scope.launch {
+                                    kotlinx.coroutines.delay(2000)
+                                    isChecking = false
+                                    showSubscriptionUrlDialog = false
+                                    dialogSubscriptionUrl = ""
+                                }
+                            } else {
+                                dialogError = "Введите Subscription URL"
+                            }
+                        },
+                        enabled = !isChecking && dialogSubscriptionUrl.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NeonPrimary
+                        )
+                    ) {
+                        if (isChecking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Проверка...", color = Color.White)
+                        } else {
+                            Text("Проверить", color = Color.White)
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { 
+                            showSubscriptionUrlDialog = false
+                            dialogSubscriptionUrl = ""
+                            dialogError = null
+                        }
+                    ) {
+                        Text("Отмена", color = TextSecondary)
+                    }
+                },
+                containerColor = CardDark,
+                titleContentColor = TextPrimary,
+                textContentColor = TextPrimary
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -80,52 +232,9 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Подписка
-            SettingsSection(title = "Подписка") {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = CardDark
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            val info = currentSubscriptionInfo
-                            Text(
-                                text = info?.format() ?: "Не активирован",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (info != null && !info.expired && (info.days > 0 || info.hours > 0 || info.unlimited)) NeonPrimary else TextSecondary
-                            )
-                        }
-                    }
-                }
-            }
+            // Подписка и Настройка VPN теперь в главном меню
+            // Оставляем только "О приложении"
 
-            // Подключение
-            SettingsSection(title = "Подключение") {
-                SettingsSwitch(
-                    title = "Автоподключение",
-                    description = "Автоматически подключаться при запуске",
-                    checked = useAutoConnect,
-                    onCheckedChange = { useAutoConnect = it }
-                )
-            }
-
-            // Уведомления
-            SettingsSection(title = "Уведомления") {
-                SettingsSwitch(
-                    title = "Уведомления",
-                    description = "Показывать уведомления о статусе VPN",
-                    checked = useNotifications,
-                    onCheckedChange = { useNotifications = it }
-                )
-            }
             
             // О приложении
             SettingsSection(title = "О приложении") {
@@ -155,7 +264,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Выход
+            // Назад
             Spacer(modifier = Modifier.height(8.dp))
             
             Button(
@@ -165,7 +274,7 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Выйти", color = Color.White)
+                Text("Назад", color = Color.White)
             }
         }
     }

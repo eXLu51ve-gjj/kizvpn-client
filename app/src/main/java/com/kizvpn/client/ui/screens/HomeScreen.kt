@@ -56,6 +56,7 @@ import com.kizvpn.client.ui.components.TrafficGraph
 import com.kizvpn.client.ui.components.VideoBackground
 import com.kizvpn.client.ui.components.VideoButton
 import com.kizvpn.client.ui.components.NetworkStatsModal
+import com.kizvpn.client.ui.components.RoutingModal
 import com.kizvpn.client.ui.models.ConnectionStatus
 import com.kizvpn.client.ui.theme.BackgroundDark
 import com.kizvpn.client.ui.theme.KizVpnTheme
@@ -124,6 +125,7 @@ fun HomeScreen(
     var showAboutModal by remember { mutableStateOf(false) } // Модальное окно "О приложении"
     var showVpnConfigModal by remember { mutableStateOf(false) } // Модальное окно настройки VPN
     var showNetworkChartModal by remember { mutableStateOf(false) } // Модальное окно графика сети
+    var showRoutingModal by remember { mutableStateOf(false) } // Модальное окно маршрутизации
     
     // Уведомление о подписке
     var showSubscriptionNotification by remember { mutableStateOf(false) }
@@ -252,7 +254,7 @@ fun HomeScreen(
         // Не открываем меню, если открыты модальные окна
         VideoButton(
             onClick = { 
-                if (!showStatisticsModal && !showSettingsModal && !showHistoryModal && !showAboutModal && !showVpnConfigModal) {
+                if (!showStatisticsModal && !showSettingsModal && !showHistoryModal && !showAboutModal && !showVpnConfigModal && !showRoutingModal) {
                     showMenuDropdown = !showMenuDropdown
                 }
             },
@@ -450,6 +452,10 @@ fun HomeScreen(
             subscriptionInfo = subscriptionInfo,
             onLogout = {
                 // TODO: Добавить логику выхода
+            },
+            onOpenRouting = {
+                showSettingsModal = false
+                showRoutingModal = true
             }
         )
         
@@ -497,7 +503,7 @@ fun HomeScreen(
         // Выпадающее меню - overlay поверх всего экрана (но ниже кнопок)
         // Не показываем главное меню, если открыты модальные окна
         BottomMenuDropdown(
-            showMenu = showMenuDropdown && !showStatisticsModal && !showSettingsModal && !showHistoryModal && !showAboutModal && !showVpnConfigModal && !showNetworkChartModal,
+            showMenu = showMenuDropdown && !showStatisticsModal && !showSettingsModal && !showHistoryModal && !showAboutModal && !showVpnConfigModal && !showNetworkChartModal && !showRoutingModal,
             onDismiss = { showMenuDropdown = false },
             onOpenSettings = {
                 showMenuDropdown = false
@@ -527,6 +533,12 @@ fun HomeScreen(
                 showNetworkChartModal = true
                 showMenuDropdown = false
             }
+        )
+
+        // Модальное окно маршрутизации
+        RoutingModal(
+            showRouting = showRoutingModal,
+            onDismiss = { showRoutingModal = false }
         )
         
         // Модальное окно графика сети

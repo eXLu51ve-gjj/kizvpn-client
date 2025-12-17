@@ -15,6 +15,7 @@
     
     <!-- Subscription -->
     <string name="subscription_title">Подписка</string>
+    <string name="subscription_single">Подписка</string>
     <string name="days_remaining">Осталось дней: %1$d</string>
     <string name="expired">Подписка истекла</string>
     <string name="unlimited">Безлимит</string>
@@ -27,7 +28,40 @@
     
     <!-- Settings -->
     <string name="settings">Настройки</string>
+    <string name="language">Язык</string>
+    <string name="auto_connect">Автоподключение</string>
+    <string name="auto_connect_desc">Автоматически подключаться при запуске</string>
+    <string name="notifications">Уведомления</string>
+    <string name="notifications_desc">Показывать уведомления о статусе VPN</string>
+    <string name="routing">Маршрутизация</string>
+    <string name="routing_desc">Выберите приложения для работы через VPN</string>
     <string name="about">О приложении</string>
+    <string name="logout">Назад</string>
+    <string name="version">Версия %1$s</string>
+    
+    <!-- Menu -->
+    <string name="menu_subscription">Подписка</string>
+    <string name="menu_statistics">Статистика</string>
+    <string name="menu_settings">Настройки</string>
+    <string name="menu_history">История</string>
+    <string name="menu_history_full">История подключений</string>
+    <string name="menu_about">О приложении</string>
+    <string name="menu_exit">Назад</string>
+    <string name="show_chart">Показать график</string>
+    
+    <!-- Other -->
+    <string name="close">Закрыть</string>
+    <string name="edit">Редактировать</string>
+    <string name="share">Поделиться</string>
+    <string name="delete">Удалить</string>
+    <string name="save_config">Сохранить конфиг</string>
+    <string name="saving">Сохранение...</string>
+    <string name="days_hours">%1$d дн. %2$d ч.</string>
+    <string name="days_only">%1$d дн.</string>
+    <string name="not_activated">Не активирован</string>
+    <string name="ping_na">N/A</string>
+    <string name="ping_ms">%1$d ms</string>
+    <string name="ping_s">%1$d s</string>
     
     <!-- Errors -->
     <string name="error_vpn_not_supported">VPN не поддерживается на этом устройстве</string>

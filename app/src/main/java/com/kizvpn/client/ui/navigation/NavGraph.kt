@@ -47,8 +47,10 @@ fun AppNavHost(
     onActivateKey: (String, (Int?) -> Unit) -> Unit = { _, _ -> },
     onSaveWireGuardConfig: (String) -> Unit = {},
     onSelectConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> },
+    onDeleteConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> },
     configNotification: String? = null,
-    onShowConfigNotification: (String) -> Unit = {} // Callback для показа уведомления сверху экрана
+    onShowConfigNotification: (String) -> Unit = {}, // Callback для показа уведомления сверху экрана
+    onSubscriptionUrlCheck: ((String) -> Unit)? = null // Callback для проверки subscription URL
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
@@ -95,7 +97,8 @@ fun AppNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 subscriptionInfo = subscriptionInfo,
-                context = context
+                context = context,
+                onSubscriptionUrlCheck = onSubscriptionUrlCheck
             )
         }
         
@@ -103,9 +106,15 @@ fun AppNavHost(
             QRCodeScreen(
                 onBack = { navController.popBackStack() },
                 onConfigScanned = { config ->
-                    // Обработка отсканированного конфига
-                    onConfigChange(config)
-                    navController.popBackStack()
+                    try {
+                        // Обработка отсканированного конфига
+                        onConfigChange(config)
+                        // Закрытие экрана происходит внутри QRCodeScreen после задержки
+                    } catch (e: Exception) {
+                        android.util.Log.e("NavGraph", "Ошибка при обработке отсканированного конфига", e)
+                        // В случае ошибки все равно закрываем экран
+                        navController.popBackStack()
+                    }
                 }
             )
         }

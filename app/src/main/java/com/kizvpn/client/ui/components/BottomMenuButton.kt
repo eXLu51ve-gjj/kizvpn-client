@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.CheckCircle
@@ -28,6 +29,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -48,8 +50,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import android.util.Log
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import org.json.JSONArray
 import org.json.JSONObject
+import com.kizvpn.client.util.localizedString
 
 /**
  * Кнопка меню с выпадающим окном и анимацией вращения
@@ -324,27 +329,39 @@ fun BottomMenuDropdown(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.48f)
-                    .padding(end = 16.dp, top = 16.dp, bottom = 100.dp) // Увеличили padding внизу
-                    .verticalScroll(rememberScrollState()), // Делаем скроллируемым
+                    .fillMaxWidth(0.6f) // немного шире, как просили
+                    .padding(end = 0.dp, top = 16.dp, bottom = 100.dp) // без правого отступа – капсулы прижаты к краю
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                // Пункты меню (сверху вниз)
+                // Пункты меню (текст + иконка)
                 val menuItems = listOf(
-                    "Настройка VPN" to { onShowVpnConfig(); onDismiss() }, // Объединенная кнопка
-                    "Сканировать QR-код" to { onScanQRCode(); onDismiss() },
-                    "Показать график" to { onShowNetworkChart(); onDismiss() },
-                    "Статистика" to { onShowStatistics(); onDismiss() },
-                    "История подключений" to { onShowHistory(); onDismiss() },
-                    "Настройки" to { onOpenSettings(); onDismiss() },
-                    "О приложении" to { onShowAbout(); onDismiss() }
+                    Triple(localizedString(R.string.menu_subscription), R.drawable.ic_menu_subscription) {
+                        onShowVpnConfig(); onDismiss()
+                    },
+                    Triple(localizedString(R.string.show_chart), R.drawable.ic_menu_chart) {
+                        onShowNetworkChart(); onDismiss()
+                    },
+                    Triple(localizedString(R.string.menu_statistics), R.drawable.ic_menu_statistics) {
+                        onShowStatistics(); onDismiss()
+                    },
+                    Triple(localizedString(R.string.menu_history), R.drawable.ic_menu_history) {
+                        onShowHistory(); onDismiss()
+                    },
+                    Triple(localizedString(R.string.menu_settings), R.drawable.ic_menu_settings) {
+                        onOpenSettings(); onDismiss()
+                    },
+                    Triple(localizedString(R.string.menu_about), R.drawable.ic_menu_about) {
+                        onShowAbout(); onDismiss()
+                    }
                 )
 
-                menuItems.forEachIndexed { index, (text, action) ->
+                menuItems.forEachIndexed { index, (text, iconResId, action) ->
                     AnimatedMenuItem(
                         text = text,
-                        animationState = animationStates[7 - index], // Обновлен индекс (теперь 8 элементов вместо 9)
+                        animationState = animationStates[7 - index],
+                        iconResId = iconResId,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             action()
@@ -1620,7 +1637,8 @@ fun AnimatedMenuItem(
     text: String,
     animationState: MenuItemAnimationState,
     onClick: () -> Unit,
-    zenterFontFamily: FontFamily
+    zenterFontFamily: FontFamily,
+    iconResId: Int? = null
 ) {
     // Анимация нажатия
     var isPressed by remember { mutableStateOf(false) }
@@ -1642,50 +1660,67 @@ fun AnimatedMenuItem(
             .graphicsLayer {
                 rotationZ = animationState.rotation.value
             }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp), // как в настройках
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (iconResId != null) {
+                Image(
+                    painter = painterResource(id = iconResId),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                )
+            }
+
             Card(
                 modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    onClick = onClick,
-                    onClickLabel = text
-                ),
-                colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.75f)
-            ),
-            shape = MaterialTheme.shapes.medium,
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 6.dp,
-                pressedElevation = 8.dp
-            )
-        ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                    .padding(vertical = 16.dp, horizontal = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = zenterFontFamily,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.2.sp
+                    .weight(1f)
+                    .clickable(
+                        onClick = onClick,
+                        onClickLabel = text
                     ),
-                    color = Color.White.copy(alpha = 0.95f)
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black.copy(alpha = 0.75f)
+                ),
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 6.dp,
+                    pressedElevation = 8.dp
                 )
-
-                // Декоративный индикатор
-                Box(
+            ) {
+                Row(
                     modifier = Modifier
-                        .size(4.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            shape = MaterialTheme.shapes.small
-                        )
-                )
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp, horizontal = 18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = zenterFontFamily,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.2.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.95f)
+                    )
+
+                    // Декоративный индикатор (оранжевая точка)
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .background(
+                                color = Color(0xFFFF9500).copy(alpha = 0.9f),
+                                shape = MaterialTheme.shapes.small
+                            )
+                    )
+                }
             }
         }
     }
@@ -2037,7 +2072,7 @@ fun StatisticsModal(
                     }
                 }
                 
-                // Кнопка "Выход" (индекс 0 - самый нижний, красная)
+                // Кнопка "Назад" (индекс 0 - самый нижний, красная)
                 AnimatedModalCard(animationState = animationStates[0]) {
                     Card(
                         modifier = Modifier
@@ -2059,10 +2094,10 @@ fun StatisticsModal(
                                 .fillMaxWidth()
                                 .padding(vertical = 14.dp, horizontal = 18.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                                text = "Выход",
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = localizedString(R.string.menu_exit),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 15.sp,
@@ -2070,14 +2105,14 @@ fun StatisticsModal(
                                 ),
                                 color = Color.White.copy(alpha = 0.95f)
                             )
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .background(
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        shape = MaterialTheme.shapes.small
-                                    )
-                            )
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                    shape = MaterialTheme.shapes.small
+                                )
+                        )
                         }
                     }
                 }
@@ -2203,7 +2238,8 @@ fun SettingsModal(
     onAutoConnectChange: (Boolean) -> Unit = {},
     onNotificationsChange: (Boolean) -> Unit = {},
     initialAutoConnect: Boolean = false,
-    initialNotifications: Boolean = true
+    initialNotifications: Boolean = true,
+    onOpenRouting: () -> Unit = {}
 ) {
     val zenterFontFamily = getJuraFontFamily()
     val haptic = LocalHapticFeedback.current
@@ -2223,6 +2259,22 @@ fun SettingsModal(
                 .getBoolean("notifications_enabled", initialNotifications)
         )
     }
+    // Состояние безопасности
+    var securityEnabled by remember {
+        mutableStateOf(
+            context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                .getBoolean("security_enabled", false)
+        )
+    }
+    // Состояние маршрутизации: включена, если выбран хотя бы один app в RoutingModal
+    var routingEnabled by remember { mutableStateOf(false) }
+    // Текущий язык интерфейса
+    var currentLanguage by remember {
+        mutableStateOf(
+            context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                .getString("language", "ru") ?: "ru"
+        )
+    }
     
     // Сохраняем настройки при изменении
     LaunchedEffect(useAutoConnect) {
@@ -2240,14 +2292,33 @@ fun SettingsModal(
             .apply()
         onNotificationsChange(useNotifications)
     }
+    LaunchedEffect(securityEnabled) {
+        context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("security_enabled", securityEnabled)
+            .apply()
+    }
+    // Обновляем состояние маршрутизации при каждом открытии окна настроек
+    LaunchedEffect(showSettings) {
+        if (showSettings) {
+            routingEnabled = try {
+                val prefs = context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                val json = prefs.getString("routing_selected_apps", "[]")
+                val arr = org.json.JSONArray(json)
+                arr.length() > 0
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
     
-    // Создаем состояния анимации для каждого элемента (7 элементов: заголовок, подписка, автоподключение, уведомления, о приложении, выйти)
+    // Создаем состояния анимации для каждого элемента (8 элементов: заголовок, подписка, язык, автоподключение, уведомления, маршрутизация, безопасность, назад)
     val animationStates = remember {
-        List(7) { MenuItemAnimationState() }
+        List(8) { MenuItemAnimationState() }
     }
     
     // Задержки для анимации (как в основной менюшке)
-    val animationDelays = listOf(0, 60, 120, 180, 240, 300, 360)
+    val animationDelays = listOf(0, 60, 120, 180, 240, 300, 360, 420)
     
     // Управление видимостью overlay
     var isVisible by remember { mutableStateOf(false) }
@@ -2398,8 +2469,8 @@ fun SettingsModal(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                // Заголовок (индекс 6 - самый верхний)
-                AnimatedModalCard(animationState = animationStates[6]) {
+                // Заголовок (индекс 7 - самый верхний)
+                AnimatedModalCard(animationState = animationStates[7]) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -2436,130 +2507,266 @@ fun SettingsModal(
                     }
                 }
                 
-                // Подписка (индекс 5)
+                // Язык (индекс 5) — капсула на всю ширину, иконка вынесена наружу
                 AnimatedModalCard(animationState = animationStates[5]) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.Black.copy(alpha = 0.75f)
-                        ),
-                        shape = MaterialTheme.shapes.medium,
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        // Капсула
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 14.dp, horizontal = 18.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .align(Alignment.Center),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.Black.copy(alpha = 0.75f)
+                            ),
+                            shape = MaterialTheme.shapes.medium,
+                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp, horizontal = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Text(
-                                    text = "Подписка",
+                                    text = localizedString(R.string.language),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = Color(0xFF5B9BD5).copy(alpha = 0.8f) // Мягкий синий цвет
+                                    color = Color(0xFF5B9BD5).copy(alpha = 0.8f)
                                 )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = subscriptionInfo?.format() ?: "Не активирован",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = zenterFontFamily,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = if (subscriptionInfo != null && !subscriptionInfo.expired && (subscriptionInfo.days > 0 || subscriptionInfo.hours > 0 || subscriptionInfo.unlimited)) 
-                                        Color(0xFF5B9BD5) else Color.White.copy(alpha = 0.7f) // Мягкий синий цвет
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                        shape = MaterialTheme.shapes.small
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ru_eng),
+                                        contentDescription = "Language toggle",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(32.dp)
+                                            .padding(horizontal = 4.dp)
+                                            .zIndex(0f)
                                     )
-                            )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .fillMaxHeight()
+                                            .zIndex(1f)
+                                    ) {
+                                        if (currentLanguage != "en") {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.5f)
+                                                    .fillMaxHeight()
+                                                    .background(
+                                                        Color(0xFFFFA500).copy(alpha = 0.4f),
+                                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                                            topStart = 8.dp,
+                                                            bottomStart = 8.dp
+                                                        )
+                                                    )
+                                            )
+                                        }
+                                        if (currentLanguage == "en") {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.5f)
+                                                    .fillMaxHeight()
+                                                    .align(Alignment.CenterEnd)
+                                                    .background(
+                                                        Color(0xFFFFA500).copy(alpha = 0.4f),
+                                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                                            topEnd = 8.dp,
+                                                            bottomEnd = 8.dp
+                                                        )
+                                                    )
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .zIndex(2f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clickable {
+                                                    if (currentLanguage != "ru") {
+                                                        currentLanguage = "ru"
+                                                        context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                                            .edit()
+                                                            .putString("language", "ru")
+                                                            .apply()
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    }
+                                                }
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clickable {
+                                                    if (currentLanguage != "en") {
+                                                        currentLanguage = "en"
+                                                        context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                                            .edit()
+                                                            .putString("language", "en")
+                                                            .apply()
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    }
+                                                }
+                                        )
+                                    }
+                                }
+                            }
                         }
+
+                        // Иконка вынесена за левый край капсулы
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_settings_language),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-26).dp)
+                                .size(26.dp),
+                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                        )
+                        // Фиолетовая точка справа
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 8.dp)
+                                .size(4.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                    shape = MaterialTheme.shapes.small
+                                )
+                        )
                     }
                 }
-                
+
                 // Автоподключение (индекс 4)
                 AnimatedModalCard(animationState = animationStates[4]) {
-                    SettingsSwitchCard(
-                        title = "Автоподключение",
-                        description = "Автоматически подключаться при запуске",
-                        checked = useAutoConnect,
-                        onCheckedChange = { useAutoConnect = it },
-                        zenterFontFamily = zenterFontFamily
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SettingsSwitchCard(
+                            title = localizedString(R.string.auto_connect),
+                            description = "",
+                            checked = useAutoConnect,
+                            onCheckedChange = { useAutoConnect = it },
+                            zenterFontFamily = zenterFontFamily,
+                            iconResId = R.drawable.off_on
+                        )
+
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_settings_auto_connect),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-26).dp)
+                                .size(26.dp),
+                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                        )
+                    }
                 }
                 
                 // Уведомления (индекс 3)
                 AnimatedModalCard(animationState = animationStates[3]) {
-                    SettingsSwitchCard(
-                        title = "Уведомления",
-                        description = "Показывать уведомления о статусе VPN",
-                        checked = useNotifications,
-                        onCheckedChange = { useNotifications = it },
-                        zenterFontFamily = zenterFontFamily
-                    )
-                }
-                
-                // О приложении (индекс 2)
-                AnimatedModalCard(animationState = animationStates[2]) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.Black.copy(alpha = 0.75f)
-                        ),
-                        shape = MaterialTheme.shapes.medium,
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        SettingsSwitchCard(
+                            title = localizedString(R.string.notifications),
+                            description = "",
+                            checked = useNotifications,
+                            onCheckedChange = { useNotifications = it },
+                            zenterFontFamily = zenterFontFamily,
+                            iconResId = R.drawable.off_on
+                        )
+
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_settings_notifications),
+                            contentDescription = null,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 14.dp, horizontal = 18.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "KIZ VPN",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = zenterFontFamily,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Версия 2.2.1",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = zenterFontFamily,
-                                        fontSize = 13.sp
-                                    ),
-                                    color = Color.White.copy(alpha = 0.95f)
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                        shape = MaterialTheme.shapes.small
-                                    )
-                            )
-                        }
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-26).dp)
+                                .size(26.dp),
+                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                        )
                     }
                 }
                 
-                // Выйти (индекс 1 - красная кнопка для выхода из аккаунта и закрытия модального окна)
+                // Маршрутизация (индекс 2)
+                AnimatedModalCard(animationState = animationStates[2]) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onOpenRouting()
+                            }
+                    ) {
+                        SettingsSwitchCard(
+                            title = localizedString(R.string.routing),
+                            description = "",
+                            checked = routingEnabled,
+                            onCheckedChange = { /* read-only индикатор */ },
+                            zenterFontFamily = zenterFontFamily,
+                            iconResId = R.drawable.off_on,
+                            interactive = false
+                        )
+
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_settings_routing),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-26).dp)
+                                .size(26.dp),
+                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                        )
+                    }
+                }
+
+                // Безопасность (индекс 1)
                 AnimatedModalCard(animationState = animationStates[1]) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SettingsSwitchCard(
+                            title = "Безопасность",
+                            description = "",
+                            checked = securityEnabled,
+                            onCheckedChange = { securityEnabled = it },
+                            zenterFontFamily = zenterFontFamily,
+                            iconResId = R.drawable.off_on
+                        )
+
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_settings_security),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-26).dp)
+                                .size(26.dp),
+                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                        )
+                    }
+                }
+                
+                // Назад (красная кнопка)
+                AnimatedModalCard(animationState = animationStates[0]) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2584,7 +2791,7 @@ fun SettingsModal(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Выйти",
+                                text = localizedString(R.string.menu_exit),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 15.sp,
@@ -2614,8 +2821,11 @@ fun SettingsSwitchCard(
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    zenterFontFamily: FontFamily
+    zenterFontFamily: FontFamily,
+    iconResId: Int? = null,
+    interactive: Boolean = true
 ) {
+    val haptic = LocalHapticFeedback.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -2624,56 +2834,136 @@ fun SettingsSwitchCard(
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                .padding(vertical = 14.dp, horizontal = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-            Column(modifier = Modifier.weight(1f)) {
-                        Text(
+        Box(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp, horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontFamily = zenterFontFamily,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = Color(0xFF5B9BD5).copy(alpha = 0.8f) // Мягкий синий цвет
+                    color = Color(0xFF5B9BD5).copy(alpha = 0.8f)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = zenterFontFamily,
-                        fontSize = 12.sp
-                    ),
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Switch(
-                    checked = checked,
-                    onCheckedChange = onCheckedChange,
-                    modifier = Modifier.scale(0.75f), // Уменьшаем размер переключателя
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF00FF88),
-                        checkedTrackColor = Color(0xFF00FF88).copy(alpha = 0.5f)
+                if (description.isNotBlank()) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = zenterFontFamily,
+                            fontSize = 12.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.7f)
                     )
-                )
-                // Декоративный индикатор (фиолетовая точка)
+                }
+
+                // OFF/ON индикатор
                 Box(
                     modifier = Modifier
-                        .size(4.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            shape = MaterialTheme.shapes.small
+                        .fillMaxWidth()
+                        .height(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (iconResId != null) {
+                        Image(
+                            painter = painterResource(id = iconResId),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(32.dp)
+                                .padding(horizontal = 4.dp)
+                                .zIndex(0f)
                         )
-                )
+                    }
+
+                    // Оранжевая подсветка выбранной части
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .zIndex(1f)
+                    ) {
+                        if (!checked) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .fillMaxHeight()
+                                    .background(
+                                        Color(0xFFFFA500).copy(alpha = 0.4f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                            topStart = 8.dp,
+                                            bottomStart = 8.dp
+                                        )
+                                    )
+                            )
+                        }
+                        if (checked) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .fillMaxHeight()
+                                    .align(Alignment.CenterEnd)
+                                    .background(
+                                        Color(0xFFFFA500).copy(alpha = 0.4f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                            topEnd = 8.dp,
+                                            bottomEnd = 8.dp
+                                        )
+                                    )
+                            )
+                        }
+                    }
+
+                    if (interactive) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(2f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable {
+                                        if (checked) {
+                                            onCheckedChange(false)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                    }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable {
+                                        if (!checked) {
+                                            onCheckedChange(true)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                    }
+                            )
+                        }
+                    }
+                }
             }
+
+            // Фиолетовая точка справа (как в старом дизайне)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+                    .size(4.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        shape = MaterialTheme.shapes.small
+                    )
+            )
         }
     }
 }
@@ -2956,7 +3246,7 @@ fun HistoryModal(
                     }
                 }
                 
-                // Кнопка "Выход" (индекс 0 - самый нижний, красная)
+                // Кнопка "Назад" (индекс 0 - самый нижний, красная)
                 AnimatedModalCard(animationState = animationStates[0]) {
                     Card(
                         modifier = Modifier
@@ -2978,10 +3268,10 @@ fun HistoryModal(
                                 .fillMaxWidth()
                                 .padding(vertical = 14.dp, horizontal = 18.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                                text = "Выход",
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = localizedString(R.string.menu_exit),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 15.sp,
@@ -3501,49 +3791,41 @@ fun VpnConfigModal(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(9999f),
+                .zIndex(10000f)
+                .background(Color.Black.copy(alpha = 0.7f))
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f) // Такая же ширина как у AboutModal
-                    .fillMaxHeight(0.85f) // Такая же высота как у AboutModal
+            Card(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
                     .alpha(animationState.opacity.value)
-                    .scale(animationState.scale.value)
+                    .scale(animationState.scale.value),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1F24)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF2C2C2E) // Темно-серый фон
-                    ),
-                    shape = MaterialTheme.shapes.large, // Такие же закругленные углы как у AboutModal
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                Box(
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize()
                 ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState()) // Добавляем скролл для всего контента
-                            .padding(horizontal = 20.dp, vertical = 16.dp), // Уменьшаем padding
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp) // Увеличиваем расстояние между элементами
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Заголовок
-                        androidx.compose.material3.Text(
-                            text = "Настройка VPN",
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontFamily = FontFamily.Default,
-                                fontSize = 20.sp, // Уменьшаем размер шрифта
-                                fontWeight = FontWeight.Bold,
-                                shadow = androidx.compose.ui.graphics.Shadow(
-                                    color = Color.Black.copy(alpha = 0.3f),
-                                    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                                    blurRadius = 4f
-                                )
-                            ),
-                            color = Color(0xFF5B9BD5),
+                        // Заголовок в стиле NetworkStatsModal
+                        Text(
+                            text = "Подписки",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
                             textAlign = TextAlign.Center
                         )
                         
@@ -3671,10 +3953,10 @@ fun VpnConfigModal(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(12.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                                            .padding(12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                                 // Галочка слева для активного конфига
                                                 if (savedConfig.isActive) {
                                                     androidx.compose.material3.Icon(
@@ -3795,10 +4077,8 @@ fun VpnConfigModal(
                                             }
                                         }
                                     }
-                                    }
                                 }
-                            }
-                        } // Конец Card с сохраненными конфигами
+                            } // Конец Card с сохраненными конфигами
                         
                         // Spacer для визуального разделения между Card и кнопками
                         Spacer(modifier = Modifier.height(20.dp))
@@ -4268,24 +4548,19 @@ fun VpnConfigModal(
                             }
                         }
                         
-                        // Кнопка закрытия (внизу с отступом)
-                        // Убедимся, что кнопка всегда видна - размещаем её сразу после всех элементов
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Spacer(modifier = Modifier.height(60.dp)) // Отступ для кнопки закрытия
+                        // Отступ под кнопку Закрыть
+                        Spacer(modifier = Modifier.height(80.dp))
                     } // Column
-                } // Card
-                
-                // Кнопка закрытия жестко закреплена к низу модального окна
-                CloseButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onDismiss()
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp)
-                )
-            } // Box (внутренний)
+                } // Box (внутренний)
+            } // Card
+            
+            // Кнопка "Закрыть" как в NetworkStatsModal – снаружи контента
+            CloseButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            )
         } // Box (модальное окно)
     } // if (isVisible || showVpnConfig)
 } // VpnConfigModal

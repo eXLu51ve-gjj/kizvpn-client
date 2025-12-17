@@ -27,6 +27,9 @@
            
            <!-- Quick Settings Tile permission -->
            <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" />
+           
+           <!-- Permission to query all packages (required for Android 11+ to get installed apps list) -->
+           <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <application
         android:name=".KizVpnApplication"

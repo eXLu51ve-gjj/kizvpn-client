@@ -230,67 +230,67 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
                         android:text="@string/add_config"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
                         android:textColor="@color/text_primary"
-                        android:layout_marginBottom="16dp" />
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
                         android:hint="@string/config_hint"
-                        app:hintTextColor="@color/text_hint"
-                        app:boxStrokeColor="@color/primary_green"
                         app:boxCornerRadiusBottomEnd="12dp"
                         app:boxCornerRadiusBottomStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
                         app:boxCornerRadiusTopStart="12dp"
-                        android:layout_marginBottom="16dp">
+                        app:boxStrokeColor="@color/primary_green"
+                        app:hintTextColor="@color/text_hint">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/configEditText"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:backgroundTint="@color/primary_green"
                             android:inputType="textMultiLine"
-                            android:minLines="3"
                             android:maxLines="5"
+                            android:minLines="3"
                             android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_hint"
-                            android:backgroundTint="@color/primary_green" />
+                            android:textColorHint="@color/text_hint" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center">
+                        android:gravity="center"
+                        android:orientation="horizontal">
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/pasteButton"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
                             android:text="@string/paste_config"
                             android:textColor="@color/primary_green"
-                            app:strokeColor="@color/primary_green"
-                            app:cornerRadius="12dp" />
+                            app:cornerRadius="12dp"
+                            app:strokeColor="@color/primary_green" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/scanQrButton"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:layout_marginStart="8dp"
+                            android:layout_weight="1"
                             android:text="@string/scan_qr"
                             android:textColor="@color/accent_teal"
-                            app:strokeColor="@color/accent_teal"
                             app:cornerRadius="12dp"
-                            app:icon="@android:drawable/ic_menu_camera" />
+                            app:icon="@android:drawable/ic_menu_camera"
+                            app:strokeColor="@color/accent_teal" />
 
                     </LinearLayout>
 
