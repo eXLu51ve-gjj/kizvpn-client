@@ -7,6 +7,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -15,12 +16,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import android.content.Context
 import androidx.compose.runtime.*
@@ -37,6 +47,8 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -398,8 +410,11 @@ fun AboutModal(
         }
     }
     
-    // Управление видимостью overlay
-    var isVisible by remember { mutableStateOf(false) }
+    // Управление видимостью overlay (держим пока анимация не завершится)
+    var isOverlayVisible by remember { mutableStateOf(false) }
+    
+    // Управление видимостью для AnimatedVisibility (с задержкой для анимации входа)
+    var isContentVisible by remember { mutableStateOf(false) }
     
     // Анимация фона (как у капсул)
     val backgroundAlpha by animateFloatAsState(
@@ -408,13 +423,20 @@ fun AboutModal(
         label = "about_background_alpha"
     )
     
-    // Управление видимостью для анимации
+    // Управление видимостью для правильной анимации входа и выхода
     LaunchedEffect(showAbout) {
         if (showAbout) {
-            isVisible = true
+            // Сначала показываем overlay
+            isOverlayVisible = true
+            // Небольшая задержка, чтобы AnimatedVisibility начал с visible=false и анимировал вход
+            delay(50)
+            isContentVisible = true
         } else {
-            delay(400) // Ждем завершения анимации закрытия
-            isVisible = false
+            // Сначала скрываем контент (с анимацией)
+            isContentVisible = false
+            // Ждем завершения анимации закрытия, потом скрываем overlay
+            delay(450)
+            isOverlayVisible = false
         }
     }
     
@@ -450,7 +472,7 @@ fun AboutModal(
     val backgroundInteractionSource = remember { MutableInteractionSource() }
     
     // Показываем overlay только когда нужно
-    if (isVisible || showAbout) {
+    if (isOverlayVisible || showAbout) {
         // Затемняющий фон
         Box(
             modifier = Modifier
@@ -487,7 +509,7 @@ fun AboutModal(
         ) {
             // Анимация выезда справа в центр (как у капсул)
             AnimatedVisibility(
-                visible = showAbout,
+                visible = isContentVisible,
                 enter = slideInHorizontally(
                     initialOffsetX = { fullWidth -> fullWidth },
                     animationSpec = tween(
@@ -3413,6 +3435,33 @@ fun HistoryItemCard(
 /**
  * Модальное окно для настройки VPN (объединяет Vless и WireGuard)
  */
+// Data class для конфига с пингом (для VpnConfigModal)
+data class VpnConfigItem(
+    val id: String,
+    val config: String,
+    val name: String,
+    val host: String,
+    val port: Int = 443,
+    val protocol: String, // "VLESS" или "WireGuard"
+    val subscriptionId: String?, // null если это отдельный конфиг
+    val isActive: Boolean,
+    var ping: Int? = null
+)
+
+// Data class для блока подписки (для VpnConfigModal)
+data class VpnSubscriptionBlock(
+    val id: String,
+    val url: String,
+    val name: String,
+    val usedTraffic: String?,
+    val totalTraffic: String?,
+    val usedTrafficBytes: Long? = null,  // Для шкалы трафика
+    val totalTrafficBytes: Long? = null, // Для шкалы трафика
+    val daysRemaining: String?,
+    val configs: List<VpnConfigItem>,
+    var isExpanded: Boolean = true
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VpnConfigModal(
@@ -3420,342 +3469,596 @@ fun VpnConfigModal(
     onDismiss: () -> Unit,
     onActivateKey: (String, (Int?) -> Unit) -> Unit,
     onSaveWireGuardConfig: (String) -> Unit = {},
-    onSelectConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> }, // Callback для выбора конфига
-    onDisconnectClick: () -> Unit = {}, // Callback для отключения VPN
-    onShowConfigNotification: (String) -> Unit = {} // Callback для показа уведомления сверху экрана
+    onSelectConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> },
+    onDisconnectClick: () -> Unit = {},
+    onShowConfigNotification: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val configParser = remember { com.kizvpn.client.config.ConfigParser() }
-    val zenterFontFamily = getJuraFontFamily()
+    val vpnApiClient = remember { com.kizvpn.client.api.VpnApiClient() }
     
-    // Тип конфига (Vless или WireGuard)
-    var configType by remember { mutableStateOf(0) } // 0 = Vless, 1 = WireGuard
-    
-    var vlessInput by remember { mutableStateOf("") }
-    var wireGuardInput by remember { mutableStateOf("") }
-    var isSaving by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Загружаем сохраненные конфиги
+    // SharedPreferences
     val prefs = remember { context.getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE) }
-    var savedVlessConfig by remember { mutableStateOf(prefs.getString("saved_config", null)) }
-    var savedVlessConfigName by remember { mutableStateOf(prefs.getString("saved_config_name", null)) }
-    var savedWireGuardConfig by remember { mutableStateOf(prefs.getString("saved_wireguard_config", null)) }
-    var configActivated by remember { mutableStateOf(prefs.getBoolean("config_activated", false)) }
     
-    // Список сохраненных конфигов
-    data class SavedConfig(
-        val config: String,
-        val name: String?,
-        val type: com.kizvpn.client.config.ConfigParser.Protocol,
-        val isActive: Boolean
-    )
+    // Состояния
+    var subscriptionBlocks by remember { mutableStateOf<List<VpnSubscriptionBlock>>(emptyList()) }
+    var standaloneConfigs by remember { mutableStateOf<List<VpnConfigItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var refreshingBlockId by remember { mutableStateOf<String?>(null) } // Какой блок сейчас обновляется
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showQrScanner by remember { mutableStateOf(false) } // Показать QR сканер
+    var showQrCodeDialog by remember { mutableStateOf<String?>(null) } // Показать QR-код для шаринга
+    var addDialogInput by remember { mutableStateOf("") }
+    var addDialogError by remember { mutableStateOf<String?>(null) }
+    var pingResults by remember { mutableStateOf<Map<String, Int?>>(emptyMap()) }
+    var pingChecked by remember { mutableStateOf<Set<String>>(emptySet()) } // Отслеживаем проверенные конфиги
     
-    val savedConfigs = remember { mutableStateListOf<SavedConfig>() }
-    
-    // Выбранный конфиг (для кнопки "Выбрать конфиг")
-    var selectedConfig by remember { mutableStateOf<SavedConfig?>(null) }
-    
-    // Версия списка конфигов для отслеживания изменений
-    var configsListVersion by remember { mutableStateOf(0) }
-    
-    // Функция для загрузки конфигов (фильтрует по configType)
-    fun loadConfigs() {
-        savedConfigs.clear()
-        val activeConfigType = prefs.getString("active_config_type", null)
-        
-        Log.d("VpnConfigModal", "loadConfigs(): configType = $configType, activeConfigType = $activeConfigType")
-        
-        // Мигрируем старые конфиги в новый формат списков (если нужно)
-        // Это нужно делать только для текущей вкладки, чтобы не замедлять загрузку
-        try {
-            if (configType == 0) {
-                // Миграция Vless конфигов
-                val vlessConfig = prefs.getString("saved_config", null)
-                val vlessName = prefs.getString("saved_config_name", null)
-                if (!vlessConfig.isNullOrBlank()) {
-                    val parsedConfig = configParser.parseConfig(vlessConfig)
-                    if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.VLESS) {
-                        val listJson = prefs.getString("saved_vless_configs_list", "[]")
-                        val configList = org.json.JSONArray(listJson)
-                        var exists = false
-                        for (i in 0 until configList.length()) {
-                            val item = configList.getJSONObject(i)
-                            if (item.getString("config") == vlessConfig) {
-                                exists = true
-                                break
-                            }
-                        }
-                        if (!exists) {
-                            val configObject = org.json.JSONObject()
-                            configObject.put("config", vlessConfig)
-                            configObject.put("name", vlessName ?: "Vless конфиг")
-                            configObject.put("addedAt", System.currentTimeMillis())
-                            configList.put(configObject)
-                            prefs.edit().putString("saved_vless_configs_list", configList.toString()).commit()
-                            Log.d("VpnConfigModal", "loadConfigs(): Мигрирован Vless конфиг в список")
+    // Функция для извлечения хоста из конфига
+    fun extractHost(configString: String): String {
+        return try {
+            val parsed = configParser.parseConfig(configString)
+            if (parsed?.address != null) {
+                parsed.address
+            } else {
+                // Fallback: пробуем извлечь хост вручную для VLESS
+                if (configString.startsWith("vless://")) {
+                    val withoutProtocol = configString.removePrefix("vless://")
+                    val atIndex = withoutProtocol.indexOf('@')
+                    if (atIndex != -1) {
+                        val hostPart = withoutProtocol.substring(atIndex + 1)
+                        val colonIndex = hostPart.indexOf(':')
+                        if (colonIndex != -1) {
+                            return hostPart.substring(0, colonIndex)
                         }
                     }
                 }
-            } else {
-                // Миграция WireGuard конфигов
-                val wireGuardConfig = prefs.getString("saved_wireguard_config", null)
-                if (!wireGuardConfig.isNullOrBlank()) {
-                    val parsedConfig = configParser.parseConfig(wireGuardConfig)
-                    if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                        val listJson = prefs.getString("saved_wireguard_configs_list", "[]")
-                        val configList = org.json.JSONArray(listJson)
-                        var exists = false
-                        for (i in 0 until configList.length()) {
-                            val item = configList.getJSONObject(i)
-                            if (item.getString("config") == wireGuardConfig) {
-                                exists = true
-                                break
-                            }
-                        }
-                        if (!exists) {
-                            val configObject = org.json.JSONObject()
-                            configObject.put("config", wireGuardConfig)
-                            configObject.put("name", "WireGuard конфиг")
-                            configObject.put("addedAt", System.currentTimeMillis())
-                            configList.put(configObject)
-                            prefs.edit().putString("saved_wireguard_configs_list", configList.toString()).commit()
-                            Log.d("VpnConfigModal", "loadConfigs(): Мигрирован WireGuard конфиг в список")
+                "unknown"
+            }
+        } catch (e: Exception) {
+            "unknown"
+        }
+    }
+    
+    // Функция для извлечения порта из конфига
+    fun extractPort(configString: String): Int {
+        return try {
+            val parsed = configParser.parseConfig(configString)
+            parsed?.port ?: 443
+        } catch (e: Exception) {
+            443
+        }
+    }
+    
+    // Функция для извлечения имени из конфига
+    fun extractName(configString: String): String {
+        return try {
+            // Сначала пробуем через парсер
+            val parsed = configParser.parseConfig(configString)
+            if (parsed?.name != null && parsed.name.isNotBlank()) {
+                return parsed.name
+            }
+            
+            // Fallback: для VLESS конфигов имя после #
+            if (configString.startsWith("vless://")) {
+                val hashIndex = configString.lastIndexOf('#')
+                if (hashIndex != -1) {
+                    val name = java.net.URLDecoder.decode(configString.substring(hashIndex + 1), "UTF-8")
+                    if (name.isNotBlank()) {
+                        return name
+                    }
+                }
+            }
+            // Для WireGuard ищем комментарий
+            if (configString.contains("[Interface]")) {
+                val lines = configString.split("\n")
+                for (line in lines) {
+                    if (line.trim().startsWith("#")) {
+                        val name = line.trim().removePrefix("#").trim()
+                        if (name.isNotBlank()) {
+                            return name
                         }
                     }
                 }
             }
+            "Config"
         } catch (e: Exception) {
-            Log.e("VpnConfigModal", "loadConfigs(): Ошибка при миграции старых конфигов", e)
+            Log.e("VpnConfigModal", "Error extracting name: ${e.message}")
+            "Config"
         }
-        
-        try {
-            // Определяем, какой список конфигов загружать
-            val configListKey = if (configType == 0) "saved_vless_configs_list" else "saved_wireguard_configs_list"
-            val listJson = prefs.getString(configListKey, "[]")
-            val configList = org.json.JSONArray(listJson)
+    }
+    
+    // Функция для определения протокола
+    fun getProtocol(configString: String): String {
+        return when {
+            configString.trim().startsWith("vless://") -> "VLESS"
+            configString.contains("[Interface]") && configString.contains("PrivateKey") -> "WireGuard"
+            else -> "Unknown"
+        }
+    }
+    
+    // Функция для загрузки всех данных
+    // runPings = true - запускать проверку пингов (при первом открытии)
+    // runPings = false - не запускать пинги (при обновлении одного блока)
+    fun loadAllData(runPings: Boolean = true) {
+        coroutineScope.launch {
+            isLoading = true
             
-            Log.d("VpnConfigModal", "loadConfigs(): Загружаем список из $configListKey, найдено конфигов: ${configList.length()}")
+            val activeConfig = prefs.getString("saved_config", null)
+            val activeConfigType = prefs.getString("active_config_type", null)
             
-            // Загружаем все конфиги из списка
-            for (i in 0 until configList.length()) {
+            // Загружаем subscription блоки
+            val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+            val subscriptionsArray = try { org.json.JSONArray(subscriptionsJson) } catch (e: Exception) { org.json.JSONArray() }
+            
+            val loadedBlocks = mutableListOf<VpnSubscriptionBlock>()
+            
+            for (i in 0 until subscriptionsArray.length()) {
                 try {
-                    val item = configList.getJSONObject(i)
-                    val configString = item.getString("config")
-                    val configName = item.optString("name", null)
+                    val subObj = subscriptionsArray.getJSONObject(i)
+                    val subId = subObj.getString("id")
+                    val subUrl = subObj.getString("url")
+                    val subName = subObj.optString("name", "Subscription")
+                    val usedTraffic = subObj.optString("usedTraffic", null)
+                    val totalTraffic = subObj.optString("totalTraffic", null)
+                    val usedTrafficBytes = if (subObj.has("usedTrafficBytes")) subObj.optLong("usedTrafficBytes", 0) else null
+                    val totalTrafficBytes = if (subObj.has("totalTrafficBytes")) subObj.optLong("totalTrafficBytes", 0) else null
+                    val daysRemaining = subObj.optString("daysRemaining", null)
+                    val configsArray = subObj.optJSONArray("configs") ?: org.json.JSONArray()
                     
-                    // Парсим конфиг, чтобы определить реальный протокол
-                    val parsedConfig = configParser.parseConfig(configString)
-                    if (parsedConfig != null) {
-                        val expectedProtocol = if (configType == 0) 
-                            com.kizvpn.client.config.ConfigParser.Protocol.VLESS 
-                        else 
-                            com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD
+                    val configItems = mutableListOf<VpnConfigItem>()
+                    for (j in 0 until configsArray.length()) {
+                        val configStr = configsArray.getString(j)
+                        val configId = "${subId}_$j"
+                        val isActive = configStr == activeConfig
                         
-                        // Проверяем, что протокол соответствует ожидаемому
-                        if (parsedConfig.protocol == expectedProtocol) {
-                            // Определяем, активен ли этот конфиг
-                            // Активным считается конфиг, который соответствует active_config_type и сохранен в старых ключах
-                            val savedConfig = if (configType == 0) prefs.getString("saved_config", null) else prefs.getString("saved_wireguard_config", null)
-                            val isActive = when (parsedConfig.protocol) {
-                                com.kizvpn.client.config.ConfigParser.Protocol.VLESS -> 
-                                    activeConfigType == "vless" && configString == savedConfig
-                                com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD -> 
-                                    activeConfigType == "wireguard" && configString == savedConfig
-                                else -> false
+                        configItems.add(VpnConfigItem(
+                            id = configId,
+                            config = configStr,
+                            name = extractName(configStr),
+                            host = extractHost(configStr),
+                            port = extractPort(configStr),
+                            protocol = getProtocol(configStr),
+                            subscriptionId = subId,
+                            isActive = isActive
+                        ))
+                    }
+                    
+                    loadedBlocks.add(VpnSubscriptionBlock(
+                        id = subId,
+                        url = subUrl,
+                        name = subName,
+                        usedTraffic = usedTraffic,
+                        totalTraffic = totalTraffic,
+                        usedTrafficBytes = usedTrafficBytes,
+                        totalTrafficBytes = totalTrafficBytes,
+                        daysRemaining = daysRemaining,
+                        configs = configItems,
+                        isExpanded = true
+                    ))
+                } catch (e: Exception) {
+                    Log.e("VpnConfigModal", "Error loading subscription block", e)
+                }
+            }
+            
+            subscriptionBlocks = loadedBlocks
+            
+            // Загружаем отдельные конфиги (не из subscriptions)
+            val standaloneJson = prefs.getString("standalone_configs", "[]")
+            val standaloneArray = try { org.json.JSONArray(standaloneJson) } catch (e: Exception) { org.json.JSONArray() }
+            
+            val loadedStandalone = mutableListOf<VpnConfigItem>()
+            for (i in 0 until standaloneArray.length()) {
+                try {
+                    val configStr = standaloneArray.getString(i)
+                    val isActive = configStr == activeConfig
+                    
+                    loadedStandalone.add(VpnConfigItem(
+                        id = "standalone_$i",
+                        config = configStr,
+                        name = extractName(configStr),
+                        host = extractHost(configStr),
+                        port = extractPort(configStr),
+                        protocol = getProtocol(configStr),
+                        subscriptionId = null,
+                        isActive = isActive
+                    ))
+                } catch (e: Exception) {
+                    Log.e("VpnConfigModal", "Error loading standalone config", e)
+                }
+            }
+            
+            standaloneConfigs = loadedStandalone
+            isLoading = false
+            
+            // Запускаем пинг для всех конфигов (только при первом открытии или если runPings = true)
+            if (runPings) {
+                val allConfigs = loadedBlocks.flatMap { it.configs } + loadedStandalone
+                Log.d("VpnConfigModal", "Запуск проверки пингов для ${allConfigs.size} конфигов")
+                allConfigs.forEach { config ->
+                    if (config.host != "unknown" && config.host.isNotBlank()) {
+                        launch {
+                            try {
+                                Log.d("VpnConfigModal", "Пинг ${config.host}:${config.port}")
+                                val pingTime = com.kizvpn.client.util.PingUtil.pingServer(config.host, config.port)
+                                Log.d("VpnConfigModal", "Пинг ${config.host} = ${pingTime}ms")
+                                pingResults = pingResults + (config.id to pingTime)
+                                pingChecked = pingChecked + config.id
+                            } catch (e: Exception) {
+                                Log.e("VpnConfigModal", "Ошибка пинга ${config.host}: ${e.message}")
+                                pingResults = pingResults + (config.id to -1) // -1 означает ошибку
+                                pingChecked = pingChecked + config.id
                             }
-                            
-                            savedConfigs.add(SavedConfig(
-                                config = configString,
-                                name = configName,
-                                type = parsedConfig.protocol,
-                                isActive = isActive
-                            ))
-                            Log.d("VpnConfigModal", "loadConfigs(): Добавлен конфиг: name=$configName, isActive=$isActive, config preview=${configString.take(50)}...")
-                        } else {
-                            Log.w("VpnConfigModal", "loadConfigs(): Пропускаем конфиг с неправильным протоколом: ${parsedConfig.protocol} (ожидается $expectedProtocol)")
                         }
+                    } else {
+                        // Для неизвестных хостов сразу отмечаем как проверенные с ошибкой
+                        pingResults = pingResults + (config.id to -1)
+                        pingChecked = pingChecked + config.id
+                    }
+                }
+            }
+        }
+    }
+    
+    // Функция для добавления subscription URL или отдельного ключа
+    fun addConfig(input: String) {
+        coroutineScope.launch {
+            addDialogError = null
+            val trimmedInput = input.trim()
+            
+            // Проверяем, это URL подписки или отдельный конфиг
+            if (trimmedInput.startsWith("http://") || trimmedInput.startsWith("https://")) {
+                // Это Subscription URL
+                isLoading = true
+                try {
+                    // Получаем информацию о подписке
+                    val subscriptionInfo = vpnApiClient.getSubscriptionInfoFromUrl(trimmedInput)
+                    val configs = vpnApiClient.getSubscriptionConfigs(trimmedInput) ?: emptyList()
+                    
+                    // Добавляем подписку даже если конфигов нет (например, истекшая подписка)
+                    // Создаем новый блок подписки
+                    val subId = System.currentTimeMillis().toString()
+                    val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+                    val subscriptionsArray = try { org.json.JSONArray(subscriptionsJson) } catch (e: Exception) { org.json.JSONArray() }
+                    
+                    val newSubObj = org.json.JSONObject()
+                    newSubObj.put("id", subId)
+                    newSubObj.put("url", trimmedInput)
+                    newSubObj.put("name", "Subscription (${configs.size})")
+                        
+                    if (subscriptionInfo != null) {
+                        subscriptionInfo.formatUsedTraffic()?.let { newSubObj.put("usedTraffic", it) }
+                        subscriptionInfo.formatTotalTraffic()?.let { newSubObj.put("totalTraffic", it) }
+                        // Сохраняем числовые значения для шкалы трафика
+                        subscriptionInfo.usedTraffic?.let { newSubObj.put("usedTrafficBytes", it) }
+                        subscriptionInfo.totalTraffic?.let { newSubObj.put("totalTrafficBytes", it) }
+                        val daysText = subscriptionInfo.format()
+                        if (daysText != "Не активирован") {
+                            newSubObj.put("daysRemaining", daysText)
+                        }
+                    }
+                        
+                    val configsArray = org.json.JSONArray()
+                    configs.forEach { configsArray.put(it) }
+                    newSubObj.put("configs", configsArray)
+                    
+                    subscriptionsArray.put(newSubObj)
+                    prefs.edit().putString("subscription_blocks", subscriptionsArray.toString()).apply()
+                    
+                    showAddDialog = false
+                    addDialogInput = ""
+                    loadAllData(runPings = configs.isNotEmpty()) // Запускаем пинги только если есть конфиги
+                    
+                    if (configs.isNotEmpty()) {
+                        onShowConfigNotification("Подписка добавлена: ${configs.size} конфигов")
+                    } else {
+                        // Подписка добавлена, но конфигов нет (возможно истекла)
+                        val statusText = if (subscriptionInfo?.expired == true) "истекла" else "нет конфигов"
+                        onShowConfigNotification("Подписка добавлена ($statusText)")
                     }
                 } catch (e: Exception) {
-                    Log.e("VpnConfigModal", "loadConfigs(): Ошибка при загрузке конфига из списка (index=$i)", e)
+                    Log.e("VpnConfigModal", "Error adding subscription", e)
+                    addDialogError = "Ошибка: ${e.message}"
                 }
-            }
-            
-            // Если список пустой, пытаемся загрузить из старых ключей (для обратной совместимости)
-            if (savedConfigs.isEmpty()) {
-                Log.d("VpnConfigModal", "loadConfigs(): Список пуст, пытаемся загрузить из старых ключей")
-                val vless = prefs.getString("saved_config", null)
-                val vlessName = prefs.getString("saved_config_name", null)
-                val wireGuard = prefs.getString("saved_wireguard_config", null)
+                isLoading = false
+            } else if (trimmedInput.startsWith("vless://") || trimmedInput.contains("[Interface]")) {
+                // Это отдельный конфиг (VLESS или WireGuard)
+                val standaloneJson = prefs.getString("standalone_configs", "[]")
+                val standaloneArray = try { org.json.JSONArray(standaloneJson) } catch (e: Exception) { org.json.JSONArray() }
                 
-                if (configType == 0 && !vless.isNullOrBlank()) {
-                    val parsedConfig = configParser.parseConfig(vless)
-                    if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.VLESS) {
-                        val isActive = activeConfigType == "vless" || (activeConfigType == null && vless != null)
-                        savedConfigs.add(SavedConfig(
-                            config = vless,
-                            name = vlessName ?: "Vless конфиг",
-                            type = parsedConfig.protocol,
-                            isActive = isActive
-                        ))
-                        Log.d("VpnConfigModal", "loadConfigs(): Добавлен Vless конфиг из старого ключа")
+                // Проверяем, нет ли уже такого конфига
+                var exists = false
+                for (i in 0 until standaloneArray.length()) {
+                    if (standaloneArray.getString(i) == trimmedInput) {
+                        exists = true
+                        break
                     }
-                } else if (configType == 1 && !wireGuard.isNullOrBlank()) {
-                    val parsedConfig = configParser.parseConfig(wireGuard)
-                    if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                        val isActive = activeConfigType == "wireguard"
-                        savedConfigs.add(SavedConfig(
-                            config = wireGuard,
-                            name = "WireGuard конфиг",
-                            type = parsedConfig.protocol,
-                            isActive = isActive
-                        ))
-                        Log.d("VpnConfigModal", "loadConfigs(): Добавлен WireGuard конфиг из старого ключа")
+                }
+                
+                if (!exists) {
+                    standaloneArray.put(trimmedInput)
+                    prefs.edit().putString("standalone_configs", standaloneArray.toString()).apply()
+                    
+                    showAddDialog = false
+                    addDialogInput = ""
+                    loadAllData(runPings = true) // Запускаем пинг для нового конфига
+                    
+                    val protocol = getProtocol(trimmedInput)
+                    onShowConfigNotification("$protocol конфиг добавлен")
+                } else {
+                    addDialogError = "Этот конфиг уже добавлен"
+                }
+            } else {
+                addDialogError = "Неверный формат. Введите Subscription URL, VLESS ключ или WireGuard конфиг"
+            }
+        }
+    }
+    
+    // Функция для удаления конфига
+    fun deleteConfig(configItem: VpnConfigItem) {
+        // Если удаляем активный конфиг - очищаем его
+        val currentActiveConfig = prefs.getString("saved_config", null)
+        if (configItem.config == currentActiveConfig) {
+            prefs.edit()
+                .remove("saved_config")
+                .remove("saved_config_name")
+                .remove("active_config_type")
+                .apply()
+            Log.d("VpnConfigModal", "Удалён активный конфиг, очищаем настройки")
+        }
+        
+        if (configItem.subscriptionId != null) {
+            // Удаляем из subscription блока
+            val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+            val subscriptionsArray = try { org.json.JSONArray(subscriptionsJson) } catch (e: Exception) { org.json.JSONArray() }
+            
+            for (i in 0 until subscriptionsArray.length()) {
+                val subObj = subscriptionsArray.getJSONObject(i)
+                if (subObj.getString("id") == configItem.subscriptionId) {
+                    val configsArray = subObj.optJSONArray("configs") ?: org.json.JSONArray()
+                    val newConfigsArray = org.json.JSONArray()
+                    for (j in 0 until configsArray.length()) {
+                        if (configsArray.getString(j) != configItem.config) {
+                            newConfigsArray.put(configsArray.getString(j))
+                        }
                     }
+                    subObj.put("configs", newConfigsArray)
+                    subObj.put("name", "Subscription (${newConfigsArray.length()})")
+                    break
                 }
             }
             
+            prefs.edit().putString("subscription_blocks", subscriptionsArray.toString()).apply()
+        } else {
+            // Удаляем из standalone
+            val standaloneJson = prefs.getString("standalone_configs", "[]")
+            val standaloneArray = try { org.json.JSONArray(standaloneJson) } catch (e: Exception) { org.json.JSONArray() }
+            
+            val newArray = org.json.JSONArray()
+            for (i in 0 until standaloneArray.length()) {
+                if (standaloneArray.getString(i) != configItem.config) {
+                    newArray.put(standaloneArray.getString(i))
+                }
+            }
+            
+            prefs.edit().putString("standalone_configs", newArray.toString()).apply()
+        }
+        
+        loadAllData(runPings = false) // Не перезапускаем пинги при удалении
+    }
+    
+    // Функция для удаления всего subscription блока
+    fun deleteSubscriptionBlock(blockId: String) {
+        val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+        val subscriptionsArray = try { org.json.JSONArray(subscriptionsJson) } catch (e: Exception) { org.json.JSONArray() }
+        
+        // Проверяем, есть ли активный конфиг в этом блоке
+        val currentActiveConfig = prefs.getString("saved_config", null)
+        var shouldClearActive = false
+        
+        val newArray = org.json.JSONArray()
+        for (i in 0 until subscriptionsArray.length()) {
+            val subObj = subscriptionsArray.getJSONObject(i)
+            if (subObj.getString("id") != blockId) {
+                newArray.put(subObj)
+            } else {
+                // Проверяем, содержит ли удаляемый блок активный конфиг
+                val configsArray = subObj.optJSONArray("configs") ?: org.json.JSONArray()
+                for (j in 0 until configsArray.length()) {
+                    if (configsArray.getString(j) == currentActiveConfig) {
+                        shouldClearActive = true
+                        break
+                    }
+                }
+            }
+        }
+        
+        // Если активный конфиг был в удалённом блоке - очищаем
+        if (shouldClearActive) {
+            prefs.edit()
+                .remove("saved_config")
+                .remove("saved_config_name")
+                .remove("active_config_type")
+                .putString("subscription_blocks", newArray.toString())
+                .apply()
+            Log.d("VpnConfigModal", "Удалён блок с активным конфигом, очищаем настройки")
+        } else {
+            prefs.edit().putString("subscription_blocks", newArray.toString()).apply()
+        }
+        
+        loadAllData(runPings = false) // Не перезапускаем пинги при удалении
+    }
+    
+    // Функция для выбора конфига
+    fun selectConfig(configItem: VpnConfigItem) {
+        prefs.edit()
+            .putString("saved_config", configItem.config)
+            .putString("saved_config_name", configItem.name)
+            .putString("active_config_type", if (configItem.protocol == "VLESS") "vless" else "wireguard")
+            .apply()
+        
+        onSelectConfig(configItem.config, 
+            if (configItem.protocol == "VLESS") 
+                com.kizvpn.client.config.ConfigParser.Protocol.VLESS 
+            else 
+                com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD
+        )
+        
+        loadAllData(runPings = false) // Не перезапускаем пинги при выборе конфига
+        onShowConfigNotification("Выбран: ${configItem.name}")
+    }
+    
+    // Функция для обновления subscription
+    fun refreshSubscription(blockId: String, url: String) {
+        coroutineScope.launch {
+            refreshingBlockId = blockId // Отмечаем какой блок обновляется
+            try {
+                val subscriptionInfo = vpnApiClient.getSubscriptionInfoFromUrl(url)
+                val configs = vpnApiClient.getSubscriptionConfigs(url)
+                
+                if (configs != null) {
+                    val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+                    val subscriptionsArray = try { org.json.JSONArray(subscriptionsJson) } catch (e: Exception) { org.json.JSONArray() }
+                    
+                    for (i in 0 until subscriptionsArray.length()) {
+                        val subObj = subscriptionsArray.getJSONObject(i)
+                        if (subObj.getString("id") == blockId) {
+                            subObj.put("name", "Subscription (${configs.size})")
+                            
+                            if (subscriptionInfo != null) {
+                                subscriptionInfo.formatUsedTraffic()?.let { subObj.put("usedTraffic", it) }
+                                subscriptionInfo.formatTotalTraffic()?.let { subObj.put("totalTraffic", it) }
+                                // Сохраняем также числовые значения для шкалы
+                                subscriptionInfo.usedTraffic?.let { subObj.put("usedTrafficBytes", it) }
+                                subscriptionInfo.totalTraffic?.let { subObj.put("totalTrafficBytes", it) }
+                                val daysText = subscriptionInfo.format()
+                                if (daysText != "Не активирован") {
+                                    subObj.put("daysRemaining", daysText)
+                                }
+                            }
+                            
+                            val configsArray = org.json.JSONArray()
+                            configs.forEach { configsArray.put(it) }
+                            subObj.put("configs", configsArray)
+                            break
+                        }
+                    }
+                    
+                    prefs.edit().putString("subscription_blocks", subscriptionsArray.toString()).apply()
+                    
+                    // Загружаем данные без пингов
+                    loadAllData(runPings = false)
+                    
+                    // Обновляем пинги только для конфигов в этом блоке
+                    val updatedBlock = subscriptionBlocks.find { it.id == blockId }
+                    updatedBlock?.configs?.forEach { config ->
+                        if (config.host != "unknown" && config.host.isNotBlank()) {
+                            launch {
+                                try {
+                                    val pingTime = com.kizvpn.client.util.PingUtil.pingServer(config.host, config.port)
+                                    pingResults = pingResults + (config.id to pingTime)
+                                    pingChecked = pingChecked + config.id
+                                } catch (e: Exception) {
+                                    pingResults = pingResults + (config.id to -1)
+                                    pingChecked = pingChecked + config.id
+                                }
+                            }
+                        }
+                    }
+                    
+                    onShowConfigNotification("Подписка обновлена")
+                }
+            } catch (e: Exception) {
+                Log.e("VpnConfigModal", "Error refreshing subscription", e)
+                onShowConfigNotification("Ошибка обновления")
+            }
+            refreshingBlockId = null
+        }
+    }
+    
+    // Функция для шаринга конфига
+    fun shareConfig(configItem: VpnConfigItem) {
+        try {
+            val sendIntent = android.content.Intent().apply {
+                action = android.content.Intent.ACTION_SEND
+                putExtra(android.content.Intent.EXTRA_TEXT, configItem.config)
+                type = "text/plain"
+            }
+            val shareIntent = android.content.Intent.createChooser(sendIntent, "Поделиться конфигом")
+            context.startActivity(shareIntent)
         } catch (e: Exception) {
-            Log.e("VpnConfigModal", "loadConfigs(): Ошибка при загрузке списка конфигов", e)
-            // Fallback: загружаем из старых ключей
-            val vless = prefs.getString("saved_config", null)
-            val vlessName = prefs.getString("saved_config_name", null)
-            val wireGuard = prefs.getString("saved_wireguard_config", null)
-            
-            if (configType == 0 && !vless.isNullOrBlank()) {
-                val parsedConfig = configParser.parseConfig(vless)
-                if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.VLESS) {
-                    val isActive = activeConfigType == "vless" || (activeConfigType == null && vless != null)
-                    savedConfigs.add(SavedConfig(
-                        config = vless,
-                        name = vlessName ?: "Vless конфиг",
-                        type = parsedConfig.protocol,
-                        isActive = isActive
-                    ))
-                }
-            } else if (configType == 1 && !wireGuard.isNullOrBlank()) {
-                val parsedConfig = configParser.parseConfig(wireGuard)
-                if (parsedConfig?.protocol == com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                    val isActive = activeConfigType == "wireguard"
-                    savedConfigs.add(SavedConfig(
-                        config = wireGuard,
-                        name = "WireGuard конфиг",
-                        type = parsedConfig.protocol,
-                        isActive = isActive
-                    ))
-                }
+            Log.e("VpnConfigModal", "Error sharing config", e)
+        }
+    }
+    
+    // Функция для шаринга конфига через QR-код
+    fun shareConfigQr(configItem: VpnConfigItem) {
+        try {
+            // Генерируем QR-код и показываем диалог
+            showQrCodeDialog = configItem.config
+        } catch (e: Exception) {
+            Log.e("VpnConfigModal", "Error sharing config QR", e)
+        }
+    }
+    
+    // Функция для шаринга URL подписки
+    fun shareSubscriptionUrl(url: String) {
+        try {
+            val sendIntent = android.content.Intent().apply {
+                action = android.content.Intent.ACTION_SEND
+                putExtra(android.content.Intent.EXTRA_TEXT, url)
+                type = "text/plain"
             }
+            val shareIntent = android.content.Intent.createChooser(sendIntent, "Поделиться подпиской")
+            context.startActivity(shareIntent)
+        } catch (e: Exception) {
+            Log.e("VpnConfigModal", "Error sharing subscription URL", e)
         }
-        
-        // Если выбранный конфиг не установлен, выбираем активный конфиг по умолчанию
-        if (selectedConfig == null) {
-            selectedConfig = savedConfigs.find { it.isActive }
-            Log.d("VpnConfigModal", "loadConfigs(): selectedConfig = ${selectedConfig?.name} (isActive = ${selectedConfig?.isActive})")
-        }
-        
-        Log.d("VpnConfigModal", "loadConfigs(): Итого загружено конфигов: ${savedConfigs.size}")
     }
     
-    // Сбрасываем состояние при закрытии модального окна
+    // Функция для шаринга URL подписки через QR-код
+    fun shareSubscriptionUrlQr(url: String) {
+        try {
+            showQrCodeDialog = url
+        } catch (e: Exception) {
+            Log.e("VpnConfigModal", "Error sharing subscription QR", e)
+        }
+    }
+    
+    // Загружаем данные при открытии
     LaunchedEffect(showVpnConfig) {
-        if (!showVpnConfig) {
-            // Сбрасываем состояние загрузки при закрытии
-            isSaving = false
-            errorMessage = null
-            successMessage = null
-            Log.d("VpnConfigModal", "Модальное окно закрыто, состояние сброшено")
-        }
-    }
-    
-    // Загружаем конфиги при открытии модального окна и при изменении типа
-    LaunchedEffect(showVpnConfig, configType) {
         if (showVpnConfig) {
-            selectedConfig = null // Сбрасываем выбор при открытии модального окна
-            // Сбрасываем состояние загрузки при открытии
-            isSaving = false
-            errorMessage = null
-            successMessage = null
-            // Принудительно обновляем состояние
-            vlessInput = ""
-            wireGuardInput = ""
-            loadConfigs()
-            Log.d("VpnConfigModal", "LaunchedEffect: Загружены конфиги после открытия модального окна, configType=$configType, сохранено конфигов: ${savedConfigs.size}")
+            // Сбрасываем пинги при открытии, чтобы проверить заново
+            pingResults = emptyMap()
+            pingChecked = emptySet()
+            loadAllData(runPings = true) // Запускаем пинги при открытии окна
         }
     }
     
-    // Отслеживаем изменения в SharedPreferences для автоматического обновления списка
-    // Используем ключ для отслеживания изменений списков конфигов
-    val vlessConfigsListKey = remember { "saved_vless_configs_list" }
-    val wireGuardConfigsListKey = remember { "saved_wireguard_configs_list" }
-    
-    LaunchedEffect(configsListVersion) {
-        if (showVpnConfig) {
-            loadConfigs()
-            Log.d("VpnConfigModal", "LaunchedEffect(configsListVersion): Перезагружены конфиги, версия=$configsListVersion")
-        }
-    }
-    
-    // Автоматически скрываем сообщения об успехе через 3 секунды
-    LaunchedEffect(successMessage) {
-        if (successMessage != null) {
-            kotlinx.coroutines.delay(3000)
-            successMessage = null
-        }
-    }
-    
-    // Автоматически скрываем сообщение об успешной активации через 3 секунды
-    
-    // Создаем состояние анимации для модального окна
+    // Анимация
     val animationState = remember { MenuItemAnimationState() }
-    
-    // Управление видимостью overlay
     var isVisible by remember { mutableStateOf(false) }
     
-    // Анимация фона
     val backgroundAlpha by animateFloatAsState(
         targetValue = if (showVpnConfig) 0.7f else 0f,
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "vpn_config_background_alpha"
     )
     
-    // Управление анимациями
     LaunchedEffect(showVpnConfig) {
         if (showVpnConfig) {
             isVisible = true
             coroutineScope.launch {
                 animationState.scale.snapTo(0.8f)
                 animationState.opacity.snapTo(0f)
-                
-                launch {
-                    animationState.scale.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(400, easing = FastOutSlowInEasing)
-                    )
-                }
-                launch {
-                    animationState.opacity.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(400, easing = FastOutSlowInEasing)
-                    )
-                }
+                launch { animationState.scale.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
+                launch { animationState.opacity.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
             }
         } else {
             coroutineScope.launch {
-                launch {
-                    animationState.opacity.animateTo(
-                        targetValue = 0f,
-                        animationSpec = tween(300, easing = FastOutSlowInEasing)
-                    )
-                }
-                launch {
-                    animationState.scale.animateTo(
-                        targetValue = 0.9f,
-                        animationSpec = tween(300, easing = FastOutSlowInEasing)
-                    )
-                }
+                launch { animationState.opacity.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
+                launch { animationState.scale.animateTo(0.9f, tween(300, easing = FastOutSlowInEasing)) }
                 delay(300)
                 isVisible = false
             }
@@ -3764,7 +4067,6 @@ fun VpnConfigModal(
     
     val backgroundInteractionSource = remember { MutableInteractionSource() }
     
-    // Показываем overlay только когда нужно
     if (isVisible || showVpnConfig) {
         // Затемняющий фон
         Box(
@@ -3777,32 +4079,30 @@ fun VpnConfigModal(
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = backgroundAlpha))
             )
-            
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                            .clickable(
+                    .clickable(
                         interactionSource = backgroundInteractionSource,
                         indication = null,
-                                onClick = {
+                        onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onDismiss()
-                                }
-                            )
+                            onDismiss()
+                        }
+                    )
             )
         }
         
-        // Модальное окно VPN конфига - поверх всех элементов
+        // Модальное окно
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(10000f)
-                .background(Color.Black.copy(alpha = 0.7f))
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
-                modifier = androidx.compose.ui.Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .alpha(animationState.opacity.value)
@@ -3811,44 +4111,920 @@ fun VpnConfigModal(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1F24)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Box(
-                    modifier = androidx.compose.ui.Modifier.fillMaxSize()
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .padding(16.dp)
+                            .padding(bottom = 60.dp) // Место для кнопки закрытия
                     ) {
-                        // Заголовок
-                        Text(
-                            text = "Подписки",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
+                        // Заголовок с кнопками добавления
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            textAlign = TextAlign.Center
-                        )
+                                .padding(top = 8.dp, bottom = 16.dp), // Добавлен отступ сверху
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Подписки",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            // Кнопки добавления с подписями слева - стиль как у CloseButton
+                            // TODO: Локализация - "QR-код" -> "QR-code", "Конфиг" -> "conf"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // QR-код кнопка с эффектами
+                                Card(
+                                    onClick = { showQrScanner = true },
+                                    modifier = Modifier
+                                        .shadow(
+                                            elevation = 8.dp,
+                                            shape = RoundedCornerShape(12.dp),
+                                            clip = false
+                                        )
+                                        .graphicsLayer {
+                                            translationY = -2f // Легкий подъем
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        // Иконка
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.kizvpn.client.R.drawable.ic_camera_qr),
+                                            contentDescription = "Сканировать QR",
+                                            tint = Color(0xFF4FC3F7),
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        // Текст
+                                        Text(
+                                            text = "QR-код", // EN: "QR-code"
+                                            color = Color(0xFFFF9800),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                
+                                // Конфиг кнопка с эффектами
+                                Card(
+                                    onClick = { showAddDialog = true },
+                                    modifier = Modifier
+                                        .shadow(
+                                            elevation = 8.dp,
+                                            shape = RoundedCornerShape(12.dp),
+                                            clip = false
+                                        )
+                                        .graphicsLayer {
+                                            translationY = -2f // Легкий подъем
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        // Иконка
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.kizvpn.client.R.drawable.ic_add_key),
+                                            contentDescription = "Добавить",
+                                            tint = Color(0xFF4FC3F7),
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        // Текст
+                                        Text(
+                                            text = "Конфиг", // EN: "Config"
+                                            color = Color(0xFFFF9800),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         
-                        // Здесь будет новый контент
-                    } // Column
+                        // Контент - список subscription блоков и отдельных конфигов
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Заголовок Subscription и кнопка "пинг всех"
+                            if (subscriptionBlocks.isNotEmpty()) {
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Subscription",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color.White.copy(alpha = 0.7f)
+                                        )
+                                        
+                                        // Кнопка "пинг всех" со стилем как у CloseButton
+                                        Card(
+                                            onClick = {
+                                                // Обновить пинги для всех конфигов
+                                                coroutineScope.launch {
+                                                    val allConfigs = subscriptionBlocks.flatMap { it.configs } + standaloneConfigs
+                                                    allConfigs.forEach { config ->
+                                                        if (config.host != "unknown" && config.host.isNotBlank()) {
+                                                            launch {
+                                                                try {
+                                                                    val pingTime = com.kizvpn.client.util.PingUtil.pingServer(config.host, config.port)
+                                                                    pingResults = pingResults + (config.id to pingTime)
+                                                                    pingChecked = pingChecked + config.id
+                                                                } catch (e: Exception) {
+                                                                    pingResults = pingResults + (config.id to -1)
+                                                                    pingChecked = pingChecked + config.id
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .shadow(
+                                                    elevation = 8.dp,
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    clip = false
+                                                )
+                                                .graphicsLayer {
+                                                    translationY = -2f
+                                                },
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+                                        ) {
+                                            Text(
+                                                text = "пинг всех",
+                                                color = Color.White.copy(alpha = 0.8f),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Subscription блоки
+                            items(subscriptionBlocks.size) { index ->
+                                val block = subscriptionBlocks[index]
+                                SubscriptionBlockCard(
+                                    block = block,
+                                    pingResults = pingResults,
+                                    isRefreshing = refreshingBlockId == block.id,
+                                    onRefresh = { refreshSubscription(block.id, block.url) },
+                                    onDelete = { deleteSubscriptionBlock(block.id) },
+                                    onConfigSelect = { selectConfig(it) },
+                                    onConfigShare = { shareConfig(it) },
+                                    onConfigShareQr = { shareConfigQr(it) },
+                                    onConfigDelete = { deleteConfig(it) },
+                                    onToggleExpand = {
+                                        subscriptionBlocks = subscriptionBlocks.toMutableList().also {
+                                            it[index] = block.copy(isExpanded = !block.isExpanded)
+                                        }
+                                    },
+                                    onShareSubscription = { shareSubscriptionUrl(block.url) },
+                                    onShareSubscriptionQr = { shareSubscriptionUrlQr(block.url) }
+                                )
+                            }
+                            
+                            // Отдельные конфиги
+                            if (standaloneConfigs.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Отдельные ключи",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                    )
+                                }
+                                
+                                items(standaloneConfigs.size) { index ->
+                                    val config = standaloneConfigs[index]
+                                    ConfigItemCard(
+                                        config = config,
+                                        ping = pingResults[config.id],
+                                        onSelect = { selectConfig(config) },
+                                        onShare = { shareConfig(config) },
+                                        onShareQr = { shareConfigQr(config) },
+                                        onDelete = { deleteConfig(config) }
+                                    )
+                                }
+                            }
+                            
+                            // Пустое состояние
+                            if (subscriptionBlocks.isEmpty() && standaloneConfigs.isEmpty() && !isLoading) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = null,
+                                                tint = Color.White.copy(alpha = 0.3f),
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Нет подписок",
+                                                color = Color.White.copy(alpha = 0.5f),
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                            Text(
+                                                text = "Нажмите + чтобы добавить",
+                                                color = Color.White.copy(alpha = 0.3f),
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     
-                    // Кнопка "Закрыть" как в RoutingModal – снаружи контента
+                    // Индикатор загрузки
+                    if (isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF4FC3F7))
+                        }
+                    }
+                    
+                    // Кнопка закрытия
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.BottomCenter
                     ) {
                         CloseButton(
                             onClick = onDismiss,
-                            modifier = Modifier
-                                .padding(bottom = 16.dp)
+                            modifier = Modifier.padding(bottom = 16.dp)
                         )
                     }
-                } // Box (внутренний)
-            } // Card
-        } // Box (модальное окно)
-    } // if (showVpnConfig)
+                }
+            }
+        }
+        
+        // QR сканер - показываем поверх всего как Dialog
+        if (showQrScanner) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showQrScanner = false },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = false
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                ) {
+                    com.kizvpn.client.ui.screens.QRCodeScreen(
+                        onBack = { showQrScanner = false },
+                        onConfigScanned = { scannedConfig ->
+                            showQrScanner = false
+                            // Добавляем отсканированный конфиг
+                            addConfig(scannedConfig)
+                        }
+                    )
+                }
+            }
+        }
+        
+        // Диалог для показа QR-кода
+        showQrCodeDialog?.let { qrContent ->
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            
+            Dialog(
+                onDismissRequest = { showQrCodeDialog = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                // Клик вне QR закрывает диалог
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { showQrCodeDialog = null },
+                    contentAlignment = Alignment.Center
+                ) {
+                    // QR-код - клик копирует в буфер
+                    Box(
+                        modifier = Modifier
+                            .size(220.dp)
+                            .shadow(16.dp, RoundedCornerShape(12.dp))
+                            .background(Color.White, RoundedCornerShape(12.dp))
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(qrContent))
+                                android.widget.Toast.makeText(context, "Скопировано!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val gridSize = 25
+                            val cellSize = size.width / gridSize
+                            val hash = qrContent.hashCode()
+                            
+                            fun drawPositionMarker(startX: Float, startY: Float) {
+                                for (i in 0 until 7) {
+                                    drawRect(Color.Black, Offset(startX + i * cellSize, startY), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                    drawRect(Color.Black, Offset(startX + i * cellSize, startY + 6 * cellSize), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                    drawRect(Color.Black, Offset(startX, startY + i * cellSize), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                    drawRect(Color.Black, Offset(startX + 6 * cellSize, startY + i * cellSize), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                }
+                                for (i in 2 until 5) {
+                                    for (j in 2 until 5) {
+                                        drawRect(Color.Black, Offset(startX + i * cellSize, startY + j * cellSize), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                    }
+                                }
+                            }
+                            
+                            drawPositionMarker(0f, 0f)
+                            drawPositionMarker((gridSize - 7) * cellSize, 0f)
+                            drawPositionMarker(0f, (gridSize - 7) * cellSize)
+                            
+                            var seed = hash
+                            for (y in 0 until gridSize) {
+                                for (x in 0 until gridSize) {
+                                    if ((x < 8 && y < 8) || (x >= gridSize - 8 && y < 8) || (x < 8 && y >= gridSize - 8)) continue
+                                    seed = (seed * 1103515245 + 12345) and 0x7fffffff
+                                    if (seed % 3 == 0) {
+                                        drawRect(Color.Black, Offset(x * cellSize, y * cellSize), androidx.compose.ui.geometry.Size(cellSize, cellSize))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Диалог добавления
+        if (showAddDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddDialog = false },
+                containerColor = Color(0xFF2C2C2E),
+                title = {
+                    Text(
+                        text = "Добавить подписку",
+                        color = Color.White
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Введите Subscription URL, VLESS ключ или WireGuard конфиг",
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        OutlinedTextField(
+                            value = addDialogInput,
+                            onValueChange = { 
+                                addDialogInput = it
+                                addDialogError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("URL или ключ...", color = Color.White.copy(alpha = 0.3f)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF4FC3F7),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f)
+                            ),
+                            maxLines = 5
+                        )
+                        if (addDialogError != null) {
+                            Text(
+                                text = addDialogError!!,
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { addConfig(addDialogInput) },
+                        enabled = addDialogInput.isNotBlank()
+                    ) {
+                        Text("Добавить", color = Color(0xFF4FC3F7))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddDialog = false }) {
+                        Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Карточка блока подписки
+ */
+@Composable
+private fun SubscriptionBlockCard(
+    block: VpnSubscriptionBlock,
+    pingResults: Map<String, Int?>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit,
+    onConfigSelect: (VpnConfigItem) -> Unit,
+    onConfigShare: (VpnConfigItem) -> Unit,
+    onConfigShareQr: (VpnConfigItem) -> Unit,
+    onConfigDelete: (VpnConfigItem) -> Unit,
+    onToggleExpand: () -> Unit,
+    onShareSubscription: () -> Unit,
+    onShareSubscriptionQr: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(12.dp),
+                clip = false
+            )
+            .graphicsLayer {
+                translationY = -2f
+            },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2E)),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Заголовок блока
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand() },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Иконка обновления (или индикатор загрузки)
+                    IconButton(
+                        onClick = { if (!isRefreshing) onRefresh() },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color(0xFF4FC3F7),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Обновить",
+                                tint = Color(0xFF4FC3F7),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    
+                    // Иконка свернуть/развернуть
+                    Icon(
+                        imageVector = if (block.isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+                    
+                    Column {
+                        // Количество ключей X (цифра красная)
+                        Row {
+                            Text(
+                                text = "Количество ключей ",
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "${block.configs.size}",
+                                color = Color(0xFFE57373), // Красный цвет для цифры
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        
+                        // Информация о днях и трафике
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // Сначала дни
+                            if (block.daysRemaining != null) {
+                                Text(
+                                    text = block.daysRemaining,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            // Потом трафик: показываем использованный, а если есть лимит - добавляем максимум
+                            if (block.usedTraffic != null) {
+                                val trafficText = if (block.totalTraffic != null) {
+                                    "${block.usedTraffic} / ${block.totalTraffic}"
+                                } else {
+                                    "${block.usedTraffic} (∞)" // Безлимит
+                                }
+                                Text(
+                                    text = trafficText,
+                                    color = Color(0xFF4FC3F7),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Row {
+                    // Кнопка QR-код для подписки
+                    IconButton(
+                        onClick = onShareSubscriptionQr,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        // Красивая иконка QR-код (4 квадрата с точками)
+                        Canvas(modifier = Modifier.size(16.dp)) {
+                            val qrColor = Color(0xFF4FC3F7)
+                            val s = size.width
+                            val gap = s * 0.08f
+                            val blockSize = (s - gap) / 2
+                            val cornerRadius = s * 0.08f
+                            val dotSize = blockSize * 0.35f
+                            
+                            // Левый верхний квадрат с точкой
+                            drawRoundRect(qrColor, Offset(0f, 0f), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                            drawRect(Color(0xFF2C2C2E), Offset(blockSize * 0.25f, blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                            drawRect(qrColor, Offset((blockSize - dotSize) / 2, (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                            
+                            // Правый верхний квадрат с точкой
+                            drawRoundRect(qrColor, Offset(blockSize + gap, 0f), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                            drawRect(Color(0xFF2C2C2E), Offset(blockSize + gap + blockSize * 0.25f, blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                            drawRect(qrColor, Offset(blockSize + gap + (blockSize - dotSize) / 2, (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                            
+                            // Левый нижний квадрат с точкой
+                            drawRoundRect(qrColor, Offset(0f, blockSize + gap), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                            drawRect(Color(0xFF2C2C2E), Offset(blockSize * 0.25f, blockSize + gap + blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                            drawRect(qrColor, Offset((blockSize - dotSize) / 2, blockSize + gap + (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                            
+                            // Правый нижний - маленькие квадратики
+                            val smallBlock = blockSize * 0.4f
+                            val smallGap = blockSize * 0.1f
+                            val startX = blockSize + gap
+                            val startY = blockSize + gap
+                            drawRect(qrColor, Offset(startX, startY), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                            drawRect(qrColor, Offset(startX + smallBlock + smallGap, startY), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                            drawRect(qrColor, Offset(startX + smallBlock + smallGap, startY + smallBlock + smallGap), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                        }
+                    }
+                    
+                    // Кнопка поделиться подпиской
+                    IconButton(
+                        onClick = onShareSubscription,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Поделиться",
+                            tint = Color(0xFF4FC3F7),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    
+                    // Кнопка удаления блока
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Удалить",
+                            tint = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Шкала трафика (если есть данные)
+            if (block.usedTrafficBytes != null && block.totalTrafficBytes != null && block.totalTrafficBytes > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                val progress = (block.usedTrafficBytes.toFloat() / block.totalTrafficBytes.toFloat()).coerceIn(0f, 1f)
+                val progressColor = when {
+                    progress < 0.7f -> Color(0xFF4CAF50) // Зеленый
+                    progress < 0.9f -> Color(0xFFFFC107) // Желтый
+                    else -> Color(0xFFF44336) // Красный
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color(0xFF3A3A3E), RoundedCornerShape(2.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .height(4.dp)
+                            .background(progressColor, RoundedCornerShape(2.dp))
+                    )
+                }
+            }
+            
+            // Список конфигов (если развернуто)
+            if (block.isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                block.configs.forEach { config ->
+                    ConfigItemCard(
+                        config = config,
+                        ping = pingResults[config.id],
+                        onSelect = { onConfigSelect(config) },
+                        onShare = { onConfigShare(config) },
+                        onShareQr = { onConfigShareQr(config) },
+                        onDelete = { onConfigDelete(config) },
+                        isInSubscription = true
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Карточка отдельного конфига
+ */
+@Composable
+private fun ConfigItemCard(
+    config: VpnConfigItem,
+    ping: Int?,
+    onSelect: () -> Unit,
+    onShare: () -> Unit,
+    onShareQr: () -> Unit,
+    onDelete: () -> Unit,
+    isInSubscription: Boolean = false
+) {
+    val backgroundColor = if (config.isActive) Color(0xFF1A3A1A) else Color(0xFF252528)
+    
+    // Цвет бейджа протокола - цветной только для активных ключей
+    val protocolColor = if (config.isActive) {
+        when (config.protocol) {
+            "VLESS" -> Color(0xFF4FC3F7) // Голубой для VLESS
+            "WireGuard" -> Color(0xFF81C784) // Зелёный для WireGuard
+            else -> Color(0xFF9E9E9E) // Серый для других
+        }
+    } else {
+        Color(0xFF353538) // Тёмный фон для неактивных (похож на карточку)
+    }
+    
+    // Цвет текста протокола
+    val protocolTextColor = if (config.isActive) Color.White else Color.White.copy(alpha = 0.7f)
+    
+    // Внешний Row: прямоугольник протокола + карточка ключа
+    // Используем IntrinsicSize.Min чтобы прямоугольник был такой же высоты как карточка
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp) // Уменьшил расстояние
+    ) {
+        // Прямоугольник протокола ОТДЕЛЬНО от карточки - кликабельный для выбора ключа
+        Box(
+            modifier = Modifier
+                .width(36.dp) // Компактная ширина
+                .fillMaxHeight() // Заполняем высоту родителя (равную карточке)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(10.dp),
+                    clip = false
+                )
+                .graphicsLayer {
+                    translationY = -2f
+                }
+                .background(
+                    color = protocolColor,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0x20FFFFFF),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                .clickable { onSelect() }, // Клик для выбора ключа
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .wrapContentSize(unbounded = true) // Разрешаем тексту выходить за границы до поворота
+                    .graphicsLayer { rotationZ = -90f }
+            ) {
+                Text(
+                    text = config.protocol.uppercase(),
+                    color = protocolTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.sp,
+                    maxLines = 1
+                )
+            }
+        }
+        
+        // Карточка ключа
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    clip = false
+                )
+                .graphicsLayer {
+                    translationY = -2f
+                }
+                .clickable { onSelect() },
+            colors = CardDefaults.cardColors(containerColor = backgroundColor),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+        ) {
+            // Пинг - определяем заранее для использования в layout
+            val pingColor = when {
+                ping == null -> Color(0xFF607D8B) // Серый - загрузка
+                ping < 0 -> Color(0xFF9E9E9E) // Темно-серый - недоступен
+                ping < 100 -> Color(0xFF4CAF50) // Зеленый - отлично
+                ping < 300 -> Color(0xFFFFC107) // Желтый - нормально  
+                else -> Color(0xFFF44336) // Красный - плохо
+            }
+            val pingText = when {
+                ping == null -> "..."
+                ping < 0 -> "N/A"
+                else -> "$ping ms"
+            }
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                // Верхняя строка: Название ключа слева, кнопки справа
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // Имя конфига - прижат к верхнему левому углу
+                    Text(
+                        text = config.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    // Кнопки справа
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        // Кнопка QR-код
+                        IconButton(
+                            onClick = onShareQr,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            // Красивая иконка QR-код (4 квадрата с точками)
+                            Canvas(modifier = Modifier.size(14.dp)) {
+                                val qrColor = Color(0xFF4FC3F7)
+                                val s = size.width
+                                val gap = s * 0.08f
+                                val blockSize = (s - gap) / 2
+                                val cornerRadius = s * 0.08f
+                                val dotSize = blockSize * 0.35f
+                                
+                                // Левый верхний квадрат с точкой
+                                drawRoundRect(qrColor, Offset(0f, 0f), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                                drawRect(Color(0xFF252528), Offset(blockSize * 0.25f, blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                                drawRect(qrColor, Offset((blockSize - dotSize) / 2, (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                                
+                                // Правый верхний квадрат с точкой
+                                drawRoundRect(qrColor, Offset(blockSize + gap, 0f), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                                drawRect(Color(0xFF252528), Offset(blockSize + gap + blockSize * 0.25f, blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                                drawRect(qrColor, Offset(blockSize + gap + (blockSize - dotSize) / 2, (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                                
+                                // Левый нижний квадрат с точкой
+                                drawRoundRect(qrColor, Offset(0f, blockSize + gap), androidx.compose.ui.geometry.Size(blockSize, blockSize), androidx.compose.ui.geometry.CornerRadius(cornerRadius))
+                                drawRect(Color(0xFF252528), Offset(blockSize * 0.25f, blockSize + gap + blockSize * 0.25f), androidx.compose.ui.geometry.Size(blockSize * 0.5f, blockSize * 0.5f))
+                                drawRect(qrColor, Offset((blockSize - dotSize) / 2, blockSize + gap + (blockSize - dotSize) / 2), androidx.compose.ui.geometry.Size(dotSize, dotSize))
+                                
+                                // Правый нижний - маленькие квадратики
+                                val smallBlock = blockSize * 0.4f
+                                val smallGap = blockSize * 0.1f
+                                val startX = blockSize + gap
+                                val startY = blockSize + gap
+                                drawRect(qrColor, Offset(startX, startY), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                                drawRect(qrColor, Offset(startX + smallBlock + smallGap, startY), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                                drawRect(qrColor, Offset(startX + smallBlock + smallGap, startY + smallBlock + smallGap), androidx.compose.ui.geometry.Size(smallBlock, smallBlock))
+                            }
+                        }
+                    
+                        // Кнопка шаринга
+                        IconButton(
+                            onClick = onShare,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Поделиться",
+                                tint = Color(0xFF4FC3F7),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        
+                        // Кнопка удаления
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Удалить",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Нижняя строка: Хост слева, Пинг справа (прижат к Edit)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    // Хост - прижат к нижнему левому углу
+                    Text(
+                        text = config.host,
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    
+                    // Пинг - прижат справа (под кнопками)
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = pingColor,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = pingText,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

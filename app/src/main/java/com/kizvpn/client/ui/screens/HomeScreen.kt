@@ -472,14 +472,20 @@ fun HomeScreen(
         // Модальное окно "О приложении"
         AboutModal(
             showAbout = showAboutModal,
-            onDismiss = { showAboutModal = false }
+            onDismiss = { 
+                showAboutModal = false
+                showMenuDropdown = true // Открываем меню при закрытии
+            }
         )
         
         // Модальное окно активации ключа
         // Модальное окно настройки VPN (объединяет Vless и WireGuard)
         VpnConfigModal(
             showVpnConfig = showVpnConfigModal,
-            onDismiss = { showVpnConfigModal = false },
+            onDismiss = { 
+                showVpnConfigModal = false
+                showMenuDropdown = true // Открываем меню при закрытии
+            },
             onActivateKey = { key, callback -> onActivateKey(key, callback) },
             onSaveWireGuardConfig = { config -> onSaveWireGuardConfig(config) },
             onSelectConfig = { selectedConfig, selectedProtocol ->
@@ -538,7 +544,10 @@ fun HomeScreen(
         // Модальное окно маршрутизации
         RoutingModal(
             showRouting = showRoutingModal,
-            onDismiss = { showRoutingModal = false }
+            onDismiss = { 
+                showRoutingModal = false
+                showMenuDropdown = true // Открываем меню при закрытии
+            }
         )
         
         // Модальное окно графика сети
