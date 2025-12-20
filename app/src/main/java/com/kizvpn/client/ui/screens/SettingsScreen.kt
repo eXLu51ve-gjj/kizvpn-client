@@ -10,15 +10,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import android.util.Log
+import com.kizvpn.client.R
 import com.kizvpn.client.api.ApiEndpointTester
 import com.kizvpn.client.ui.theme.BackgroundDark
 import com.kizvpn.client.ui.theme.NeonPrimary
@@ -28,7 +30,6 @@ import com.kizvpn.client.ui.theme.TextSecondary
 import com.kizvpn.client.ui.theme.CardDark
 import com.kizvpn.client.data.SubscriptionInfo
 import com.kizvpn.client.util.localizedString
-import com.kizvpn.client.R
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -41,6 +42,8 @@ fun SettingsScreen(
     context: Context? = null,
     onSubscriptionUrlCheck: ((String) -> Unit)? = null  // Callback для проверки subscription URL
 ) {
+    val localContext = LocalContext.current
+    val effectiveContext = context ?: localContext
     // Загружаем количество конфигов из SharedPreferences
     val configsCount = remember {
         if (context != null) {
@@ -104,7 +107,7 @@ fun SettingsScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.Default.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.back),
                             tint = TextPrimary
                         )
                     }
@@ -204,9 +207,9 @@ fun SettingsScreen(
                                 color = Color.White
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Проверка...", color = Color.White)
+                            Text(effectiveContext.getString(R.string.checking), color = Color.White)
                         } else {
-                            Text("Проверить", color = Color.White)
+                            Text(effectiveContext.getString(R.string.check), color = Color.White)
                         }
                     }
                 },
@@ -218,7 +221,7 @@ fun SettingsScreen(
                             dialogError = null
                         }
                     ) {
-                        Text("Отмена", color = TextSecondary)
+                        Text(effectiveContext.getString(R.string.cancel), color = TextSecondary)
                     }
                 },
                 containerColor = CardDark,
@@ -276,7 +279,7 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Назад", color = Color.White)
+                Text(stringResource(R.string.back), color = Color.White)
             }
         }
     }
@@ -332,9 +335,9 @@ private fun TestApiEndpointsButton() {
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Проверка...", color = Color.White)
+                    Text(LocalContext.current.getString(R.string.checking), color = Color.White)
                 } else {
-                    Text("Проверить API endpoints", color = Color.White)
+                    Text(LocalContext.current.getString(R.string.check_api_endpoints), color = Color.White)
                 }
             }
             
@@ -342,7 +345,7 @@ private fun TestApiEndpointsButton() {
                 val available = testResults.count { it.isAvailable }
                 val total = testResults.size
                 Text(
-                    text = "Найдено: $available из $total",
+                    text = LocalContext.current.getString(R.string.found_endpoints, available, total),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (available > 0) NeonPrimary else TextSecondary
                 )
@@ -367,7 +370,7 @@ private fun TestApiEndpointsButton() {
                                 if (!result.responseBody.isNullOrBlank()) {
                                     val preview = result.responseBody.take(100)
                                     Text(
-                                        text = "Ответ: $preview${if (result.responseBody.length > 100) "..." else ""}",
+                                        text = LocalContext.current.getString(R.string.response_preview, "$preview${if (result.responseBody.length > 100) "..." else ""}"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextSecondary,
                                         modifier = Modifier.padding(start = 8.dp)
@@ -378,7 +381,7 @@ private fun TestApiEndpointsButton() {
                     }
                 } else {
                     Text(
-                        text = "Доступные endpoints не найдены",
+                        text = LocalContext.current.getString(R.string.no_endpoints_found),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )

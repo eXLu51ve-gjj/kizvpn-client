@@ -13,7 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.kizvpn.client.R
 import com.kizvpn.client.ui.models.Server
 import com.kizvpn.client.ui.theme.BackgroundDark
 import com.kizvpn.client.ui.theme.NeonPrimary
@@ -49,7 +51,7 @@ fun ServersScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.Default.ArrowBack,
-                        contentDescription = "Назад",
+                        contentDescription = stringResource(R.string.back),
                         tint = TextPrimary
                     )
                 }

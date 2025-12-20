@@ -12,7 +12,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.kizvpn.client.R
 import com.kizvpn.client.data.ConnectionHistoryManager
 import com.kizvpn.client.data.ConnectionHistoryEntry
 import com.kizvpn.client.ui.theme.*
@@ -42,7 +44,7 @@ fun HistoryScreen(
         TopAppBar(
             title = {
                 Text(
-                    "История подключений",
+                    stringResource(R.string.connection_history),
                     color = TextPrimary
                 )
             },
@@ -50,7 +52,7 @@ fun HistoryScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.Default.ArrowBack,
-                        contentDescription = "Назад",
+                        contentDescription = stringResource(R.string.back),
                         tint = TextPrimary
                     )
                 }
@@ -87,6 +89,7 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryItem(entry: ConnectionHistoryEntry) {
+    val ctx = LocalContext.current
     val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
     val date = dateFormat.format(Date(entry.timestamp))
     
@@ -133,7 +136,7 @@ private fun HistoryItem(entry: ConnectionHistoryEntry) {
             
             if (entry.server != null) {
                 Text(
-                    text = "Сервер: ${entry.server}",
+                    text = ctx.getString(R.string.server_label, entry.server),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -152,7 +155,7 @@ private fun HistoryItem(entry: ConnectionHistoryEntry) {
                 }
                 
                 Text(
-                    text = "Длительность: $durationText",
+                    text = ctx.getString(R.string.duration_label, durationText),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

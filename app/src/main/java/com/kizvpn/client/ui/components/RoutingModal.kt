@@ -448,7 +448,7 @@ fun RoutingModal(
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = {
                                 Text(
-                                    text = "Поиск приложений...",
+                                    text = context.getString(R.string.search_apps),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily
                                     ),

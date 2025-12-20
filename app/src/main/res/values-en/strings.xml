@@ -53,7 +53,6 @@
     <string name="menu_about">About</string>
     <string name="menu_exit">Back</string>
     <string name="show_chart">Show Chart</string>
-    <string name="saving">Saving...</string>
     
     <!-- Errors -->
     <string name="error_vpn_not_supported">VPN is not supported on this device</string>
@@ -67,6 +66,90 @@
     <string name="delete">Delete</string>
     <string name="ping_na">N/A</string>
     <string name="ping_ms">%1$d ms</string>
-    <string name="ping_s">%1$d s</string>
+    <string name="security">Security</string>
+    
+    <!-- About App -->
+    <string name="app_subtitle">Your anonymity and security online</string>
+    <string name="app_description">Simple and free VPN to protect your internet connection.\n\nProvides anonymity and security so you can surf the web safely.</string>
+    <string name="what_we_offer">What we offer</string>
+    <string name="privacy_protection">Privacy protection: Your data is securely protected.</string>
+    <string name="high_speed">High speed: Stable and fast connection.</string>
+    <string name="completely_free">Completely free: No hidden fees.</string>
+    <string name="easy_to_use">Easy to use: One-click connection.</string>
+    <string name="important">Important</string>
+    <string name="beta_warning">The app is in beta testing!\n\nWe are actively working on improvements.\n\nIf you encounter errors or bugs\nPlease let us know — your help is invaluable!</string>
+    <string name="contact_developer">Contact developer</string>
+    <string name="version_text">Version %1$s</string>
+    
+    <!-- Statistics -->
+    <string name="statistics_title">Statistics</string>
+    <string name="traffic_title">Traffic</string>
+    <string name="incoming_traffic">Incoming: %1$s</string>
+    <string name="outgoing_traffic">Outgoing: %1$s</string>
+    
+    <!-- History -->
+    <string name="connection_history">Connection History</string>
+    <string name="history_empty">Connection history will be displayed here</string>
+    <string name="server_label">Server: %1$s</string>
+    <string name="duration_label">Duration: %1$s</string>
+    
+    <!-- VPN Config -->
+    <string name="subscriptions_title">Subscriptions</string>
+    <string name="separate_keys">Separate keys</string>
+    <string name="ping_all">Ping all</string>
+    <string name="config_label">Config</string>
+    <string name="paste_vless_key">Paste Vless key</string>
+    <string name="paste_wireguard_config">Paste WireGuard config in the field below</string>
+    
+    <!-- Biometric Authentication -->
+    <string name="biometric_title">Secure Access</string>
+    <string name="biometric_subtitle">Confirm your identity to continue</string>
+    <string name="biometric_subtitle_app">Confirm your identity to access KIZ VPN</string>
+    <string name="authentication_error">Authentication error: %1$s</string>
+    <string name="authentication_cancelled">Authentication cancelled</string>
+    
+    <!-- Menu Items -->
+    <string name="menu_text">Menu</string>
+    
+    <!-- Common Actions -->
+    <string name="back">Back</string>
+    <string name="open_email">Open email</string>
+    
+    <!-- VPN Config Modal -->
+    <string name="separate_configs">Separate configs</string>
+    <string name="config_count">Config count</string>
+    <string name="network_statistics">Network Statistics</string>
+    <string name="session">Session</string>
+    <string name="download">Download</string>
+    <string name="upload">Upload</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="uploaded">Uploaded</string>
+    <string name="qr_code">QR-code</string>
+    <string name="no_network_data">No network data</string>
+    
+    <!-- Additional strings for modals -->
+    <string name="no_subscriptions">No subscriptions</string>
+    <string name="click_to_add">Click + to add</string>
+    <string name="add_subscription">Add subscription</string>
+    <string name="enter_subscription_url">Enter Subscription URL, VLESS key or WireGuard config</string>
+    <string name="search_apps">Search apps...</string>
+    <string name="settings_title">Settings</string>
+    <string name="found_endpoints">Found: %1$d of %2$d</string>
+    <string name="response_preview">Response: %1$s</string>
+    <string name="no_endpoints_found">No available endpoints found</string>
+    
+    <!-- Additional modal strings -->
+    <string name="activating">Activating...</string>
+    <string name="activate">Activate</string>
+    <string name="saving">Saving...</string>
+    <string name="save">Save</string>
+    <string name="add">Add</string>
+    <string name="cancel">Cancel</string>
+    <string name="copied">Copied!</string>
+    <string name="checking">Checking...</string>
+    <string name="check">Check</string>
+    <string name="check_api_endpoints">Check API endpoints</string>
+    <string name="expired_status">expired</string>
+    <string name="no_configs">no configs</string>
+    <string name="subscription_added_status">Subscription added (%1$s)</string>
 </resources>
-

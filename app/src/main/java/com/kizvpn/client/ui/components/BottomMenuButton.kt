@@ -113,7 +113,7 @@ fun BottomMenuButton(
     ) {
         Icon(
             Icons.Default.Menu,
-            contentDescription = "Меню",
+            contentDescription = localizedString(R.string.menu_text),
             modifier = Modifier.size(24.dp)
         )
     }
@@ -638,7 +638,7 @@ fun AboutModal(
                 putExtra(Intent.EXTRA_EMAIL, arrayOf("nml5222600@mail.ru"))
                 putExtra(Intent.EXTRA_SUBJECT, "")
             }
-            context.startActivity(Intent.createChooser(intent, "Открыть почту"))
+            context.startActivity(Intent.createChooser(intent, context.getString(R.string.open_email)))
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -777,7 +777,7 @@ fun AboutModal(
                         
                         // Подзаголовок с легкой обводкой
                         androidx.compose.material3.Text(
-                            text = "Ваша анонимность и безопасность в сети",
+                            text = localizedString(R.string.app_subtitle),
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 14.sp, // Компактнее: было 16.sp
@@ -796,7 +796,7 @@ fun AboutModal(
                         
                         // Описание с тенью
                         androidx.compose.material3.Text(
-                            text = "Простой и бесплатный VPN для защиты вашего подключения к интернету.\n\nОбеспечивает анонимность и безопасность, чтобы вы могли серфить в сети спокойно.",
+                            text = localizedString(R.string.app_description),
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 12.sp, // Компактнее: было 14.sp
@@ -815,7 +815,7 @@ fun AboutModal(
                         
                         // "Что мы предлагаем" (оранжевый) с легкой обводкой
                         androidx.compose.material3.Text(
-                            text = "Что мы предлагаем",
+                            text = localizedString(R.string.what_we_offer),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 16.sp, // Компактнее: было 18.sp
@@ -836,7 +836,7 @@ fun AboutModal(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             androidx.compose.material3.Text(
-                                text = "Защита приватности: Ваши данные под надёжной защитой.",
+                                text = localizedString(R.string.privacy_protection),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
                                     fontSize = 12.sp, // Компактнее: было 14.sp
@@ -850,7 +850,7 @@ fun AboutModal(
                                 textAlign = TextAlign.Center
                             )
                             androidx.compose.material3.Text(
-                                text = "Высокая скорость: Стабильное и быстрое соединение.",
+                                text = localizedString(R.string.high_speed),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
                                     fontSize = 12.sp, // Компактнее: было 14.sp
@@ -864,7 +864,7 @@ fun AboutModal(
                                 textAlign = TextAlign.Center
                             )
                             androidx.compose.material3.Text(
-                                text = "Полностью бесплатно: Никаких скрытых платежей.",
+                                text = localizedString(R.string.completely_free),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
                                     fontSize = 12.sp, // Компактнее: было 14.sp
@@ -878,7 +878,7 @@ fun AboutModal(
                                 textAlign = TextAlign.Center
                             )
                             androidx.compose.material3.Text(
-                                text = "Простота в использовании: Подключение одним нажатием.",
+                                text = localizedString(R.string.easy_to_use),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Default,
                                     fontSize = 12.sp, // Компактнее: было 14.sp
@@ -897,7 +897,7 @@ fun AboutModal(
                         
                         // "Важно" (оранжевый) с легкой обводкой
                         androidx.compose.material3.Text(
-                            text = "Важно",
+                            text = localizedString(R.string.important),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 16.sp, // Компактнее: было 18.sp
@@ -913,7 +913,7 @@ fun AboutModal(
                         )
                         
                         androidx.compose.material3.Text(
-                            text = "Приложение находится на стадии тестирования!\n\nМы активно работаем над его улучшением.\n\nЕсли вы столкнётесь с ошибками или багами\nПожалуйста, сообщите нам — ваша помощь бесценна!",
+                            text = localizedString(R.string.beta_warning),
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 14.sp,
@@ -932,7 +932,7 @@ fun AboutModal(
                         
                         // "Связь с разработчиком" (оранжевый) с легкой обводкой
                         androidx.compose.material3.Text(
-                            text = "Связь с разработчиком",
+                            text = localizedString(R.string.contact_developer),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 16.sp, // Компактнее: было 18.sp
@@ -1033,7 +1033,7 @@ fun AboutModal(
                         ) {
                             // Версия сборки (слева) с легкой обводкой
                             androidx.compose.material3.Text(
-                                text = "Версия $versionName",
+                                text = localizedString(R.string.version_text).format(versionName),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontFamily = FontFamily.Default,
                                     fontSize = 11.sp,
@@ -1218,7 +1218,7 @@ fun ActivateKeyModal(
                     ) {
                         // Заголовок
                         androidx.compose.material3.Text(
-                            text = "Вставьте ключ Vless",
+                            text = context.getString(R.string.paste_vless_key),
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 24.sp,
@@ -1364,9 +1364,9 @@ fun ActivateKeyModal(
                                     color = Color.White
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                androidx.compose.material3.Text("Активация...", color = Color.White)
+                                androidx.compose.material3.Text(context.getString(R.string.activating), color = Color.White)
                             } else {
-                                androidx.compose.material3.Text("Активировать", color = Color.White)
+                                androidx.compose.material3.Text(context.getString(R.string.activate), color = Color.White)
                             }
                         }
                         
@@ -1432,7 +1432,7 @@ fun ActivateKeyModal(
                                 containerColor = Color(0xFF8B2323).copy(alpha = 0.9f)
                             )
                         ) {
-                            androidx.compose.material3.Text("Закрыть", color = Color.White)
+                            androidx.compose.material3.Text(localizedString(R.string.close), color = Color.White)
                         }
                     }
                 }
@@ -1601,7 +1601,7 @@ fun WireGuardModal(
                         
                         // Инструкция
                         androidx.compose.material3.Text(
-                            text = "Вставьте WireGuard конфиг в поле ниже",
+                            text = context.getString(R.string.paste_wireguard_config),
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = FontFamily.Default,
                                 fontSize = 14.sp,
@@ -1749,9 +1749,9 @@ fun WireGuardModal(
                                     color = Color.White
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                androidx.compose.material3.Text("Сохранение...", color = Color.White)
+                                androidx.compose.material3.Text(context.getString(R.string.saving), color = Color.White)
                             } else {
-                                androidx.compose.material3.Text("Сохранить", color = Color.White)
+                                androidx.compose.material3.Text(context.getString(R.string.save), color = Color.White)
                             }
                         }
                         
@@ -1817,7 +1817,7 @@ fun WireGuardModal(
                                 containerColor = Color(0xFF8B2323).copy(alpha = 0.9f)
                             )
                         ) {
-                            androidx.compose.material3.Text("Закрыть", color = Color.White)
+                            androidx.compose.material3.Text(localizedString(R.string.close), color = Color.White)
                         }
                     }
                 }
@@ -2049,7 +2049,7 @@ fun AnimatedMenuItemWithSubscription(
                                         else -> Color(0xFFFF3B30) // Красный для плохого пинга
                                     }
                                 ),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
                             ) {
                                 Text(
                                     text = when {
@@ -2062,7 +2062,7 @@ fun AnimatedMenuItemWithSubscription(
                                         fontWeight = FontWeight.Bold
                                     ),
                                     color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.dp)
                                 )
                             }
                         }
@@ -2428,7 +2428,7 @@ fun StatisticsModal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                                text = "Статистика",
+                                text = localizedString(R.string.statistics_title),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 16.sp,
@@ -2489,7 +2489,7 @@ fun StatisticsModal(
                                 modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                                    text = "Трафик",
+                                    text = localizedString(R.string.traffic_title),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily,
                                         fontSize = 14.sp,
@@ -2499,7 +2499,7 @@ fun StatisticsModal(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Входящий: $formattedDownload",
+                                    text = localizedString(R.string.incoming_traffic).format(formattedDownload),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily,
                                         fontSize = 13.sp
@@ -2508,7 +2508,7 @@ fun StatisticsModal(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Исходящий: $formattedUpload",
+                                    text = localizedString(R.string.outgoing_traffic).format(formattedUpload),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily,
                                         fontSize = 13.sp
@@ -2945,7 +2945,7 @@ fun SettingsModal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                                text = "Настройки",
+                                text = context.getString(R.string.settings_title),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 16.sp,
@@ -3217,7 +3217,7 @@ fun SettingsModal(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         SettingsSwitchCard(
-                            title = "Безопасность",
+                            title = localizedString(R.string.security),
                             description = "",
                             checked = securityEnabled,
                             onCheckedChange = { newValue ->
@@ -3649,7 +3649,7 @@ fun HistoryModal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                                text = "История подключений",
+                                text = localizedString(R.string.connection_history),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = zenterFontFamily,
                                     fontSize = 16.sp,
@@ -3689,7 +3689,7 @@ fun HistoryModal(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "История подключений будет отображаться здесь",
+                                    text = localizedString(R.string.history_empty),
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = zenterFontFamily,
                                         fontSize = 13.sp
@@ -3780,6 +3780,7 @@ fun HistoryItemCard(
     entry: com.kizvpn.client.data.ConnectionHistoryEntry,
     zenterFontFamily: FontFamily
 ) {
+    val context = LocalContext.current
     val dateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss", java.util.Locale.getDefault()) }
     val date = dateFormat.format(java.util.Date(entry.timestamp))
     
@@ -3840,7 +3841,7 @@ fun HistoryItemCard(
                 
                 if (entry.server != null) {
                     Text(
-                        text = "Сервер: ${entry.server}",
+                        text = context.getString(R.string.server_label, entry.server),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontFamily = zenterFontFamily,
                             fontSize = 12.sp
@@ -3862,7 +3863,7 @@ fun HistoryItemCard(
                     }
                     
                     Text(
-                        text = "Длительность: $durationText",
+                        text = context.getString(R.string.duration_label, durationText),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontFamily = zenterFontFamily,
                             fontSize = 12.sp
@@ -4053,7 +4054,7 @@ fun VpnConfigModal(
                     val subObj = subscriptionsArray.getJSONObject(i)
                     val subId = subObj.getString("id")
                     val subUrl = subObj.getString("url")
-                    val subName = subObj.optString("name", "Subscription")
+                    val subName = subObj.optString("name", context.getString(R.string.subscription_single))
                     val usedTraffic = subObj.optString("usedTraffic", null)
                     val totalTraffic = subObj.optString("totalTraffic", null)
                     val usedTrafficBytes = if (subObj.has("usedTrafficBytes")) subObj.optLong("usedTrafficBytes", 0) else null
@@ -4188,7 +4189,7 @@ fun VpnConfigModal(
                         subscriptionInfo.usedTraffic?.let { newSubObj.put("usedTrafficBytes", it) }
                         subscriptionInfo.totalTraffic?.let { newSubObj.put("totalTrafficBytes", it) }
                         val daysText = subscriptionInfo.format()
-                        if (daysText != "Не активирован") {
+                        if (daysText != context.getString(R.string.not_activated)) {
                             newSubObj.put("daysRemaining", daysText)
                         }
                     }
@@ -4208,8 +4209,8 @@ fun VpnConfigModal(
                         onShowConfigNotification("Подписка добавлена: ${configs.size} конфигов")
                     } else {
                         // Подписка добавлена, но конфигов нет (возможно истекла)
-                        val statusText = if (subscriptionInfo?.expired == true) "истекла" else "��ет конфигов"
-                        onShowConfigNotification("Подписка добавлена ($statusText)")
+                        val statusText = if (subscriptionInfo?.expired == true) context.getString(R.string.expired_status) else context.getString(R.string.no_configs)
+                        onShowConfigNotification(context.getString(R.string.subscription_added_status, statusText))
                     }
                 } catch (e: Exception) {
                     Log.e("VpnConfigModal", "Error adding subscription", e)
@@ -4368,7 +4369,7 @@ fun VpnConfigModal(
                                 subscriptionInfo.usedTraffic?.let { subObj.put("usedTrafficBytes", it) }
                                 subscriptionInfo.totalTraffic?.let { subObj.put("totalTrafficBytes", it) }
                                 val daysText = subscriptionInfo.format()
-                                if (daysText != "Не активирован") {
+                                if (daysText != context.getString(R.string.not_activated)) {
                                     subObj.put("daysRemaining", daysText)
                                 }
                             }
@@ -4620,7 +4621,7 @@ fun VpnConfigModal(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Подписки",
+                                text = localizedString(R.string.subscriptions_title),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
@@ -4677,13 +4678,13 @@ fun VpnConfigModal(
                                         // Иконка
                                         Icon(
                                             painter = androidx.compose.ui.res.painterResource(id = com.kizvpn.client.R.drawable.ic_ping_all),
-                                            contentDescription = "Пинг всех",
+                                            contentDescription = localizedString(R.string.ping_all),
                                             tint = Color(0xFF4FC3F7),
                                             modifier = Modifier.size(28.dp)
                                         )
                                         // Текст
                                         Text(
-                                            text = "Пинг всех", // EN: "Ping all"
+                                            text = localizedString(R.string.ping_all), // EN: "Ping all"
                                             color = Color(0xFFFF9800),
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
@@ -4723,7 +4724,7 @@ fun VpnConfigModal(
                                         )
                                         // Текст
                                         Text(
-                                            text = "QR-код", // EN: "QR-code"
+                                            text = localizedString(R.string.qr_code), // EN: "QR-code"
                                             color = Color(0xFFFF9800),
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
@@ -4763,7 +4764,7 @@ fun VpnConfigModal(
                                         )
                                         // Текст
                                         Text(
-                                            text = "Конфиг", // EN: "Config"
+                                            text = localizedString(R.string.config_label), // EN: "Config"
                                             color = Color(0xFFFF9800),
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
@@ -4782,7 +4783,7 @@ fun VpnConfigModal(
                             if (subscriptionBlocks.isNotEmpty()) {
                                 item {
                                     Text(
-                                        text = "Subscription",
+                                        text = localizedString(R.string.subscription_single),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = Color.White.copy(alpha = 0.7f)
                                     )
@@ -4816,7 +4817,7 @@ fun VpnConfigModal(
                             if (standaloneConfigs.isNotEmpty()) {
                                 item {
                                     Text(
-                                        text = "Отдельные ключи",
+                                        text = localizedString(R.string.separate_configs),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = Color.White.copy(alpha = 0.7f),
                                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
@@ -4854,12 +4855,12 @@ fun VpnConfigModal(
                                             )
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Text(
-                                                text = "Нет подписок",
+                                                text = context.getString(R.string.no_subscriptions),
                                                 color = Color.White.copy(alpha = 0.5f),
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
                                             Text(
-                                                text = "Нажмите + чтобы добавить",
+                                                text = context.getString(R.string.click_to_add),
                                                 color = Color.White.copy(alpha = 0.3f),
                                                 style = MaterialTheme.typography.bodySmall
                                             )
@@ -4950,7 +4951,7 @@ fun VpnConfigModal(
                                 interactionSource = remember { MutableInteractionSource() }
                             ) {
                                 clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(qrContent))
-                                android.widget.Toast.makeText(context, "Скопировано!", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, context.getString(R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             .padding(12.dp),
                         contentAlignment = Alignment.Center
@@ -5001,14 +5002,14 @@ fun VpnConfigModal(
                 containerColor = Color(0xFF2C2C2E),
                 title = {
                     Text(
-                        text = "Добавить подписку",
+                        text = context.getString(R.string.add_subscription),
                         color = Color.White
                     )
                 },
                 text = {
                     Column {
                         Text(
-                            text = "Введите Subscription URL, VLESS ключ или WireGuard конфиг",
+                            text = context.getString(R.string.enter_subscription_url),
                             color = Color.White.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(bottom = 8.dp)
@@ -5044,12 +5045,12 @@ fun VpnConfigModal(
                         onClick = { addConfig(addDialogInput) },
                         enabled = addDialogInput.isNotBlank()
                     ) {
-                        Text("Добавить", color = Color(0xFF4FC3F7))
+                        Text(context.getString(R.string.add), color = Color(0xFF4FC3F7))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false }) {
-                        Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                        Text(context.getString(R.string.cancel), color = Color.White.copy(alpha = 0.7f))
                     }
                 }
             )
@@ -5137,7 +5138,7 @@ fun SubscriptionBlockCard(
                         // Количество ключей X (цифра красная)
                         Row {
                             Text(
-                                text = "Количество ключей ",
+                                text = localizedString(R.string.config_count) + " ",
                                 color = Color.White,
                                 fontWeight = FontWeight.Medium,
                                 style = MaterialTheme.typography.bodyMedium

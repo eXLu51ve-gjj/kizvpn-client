@@ -15,9 +15,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.kizvpn.client.util.LocalizationHelper
+import com.kizvpn.client.R
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.BorderStroke
@@ -42,6 +45,7 @@ fun CloseButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Card(
         onClick = onClick,
         modifier = modifier
@@ -64,7 +68,7 @@ fun CloseButton(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Закрыть",
+                text = LocalizationHelper.getString(context, R.string.close),
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
@@ -88,6 +92,7 @@ fun NetworkStatsModal(
     totalUploaded: String,
     sessionTime: String
 ) {
+    val context = LocalContext.current
     // Анимация слайда справа
     var currentOffsetX by remember { mutableStateOf(2000f) } // Начинаем справа за экраном
     val targetOffsetX = if (showStats) 0f else 2000f // Уезжает вправо за экран
@@ -184,7 +189,7 @@ fun NetworkStatsModal(
                     ) {
                         // Заголовок без логотипа
                         Text(
-                            text = "Статистика сети",
+                            text = LocalizationHelper.getString(context, R.string.network_statistics),
                             style = MaterialTheme.typography.headlineMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
@@ -193,7 +198,7 @@ fun NetworkStatsModal(
                         
                         // Время сессии
                         Text(
-                            text = "Сессия: $sessionTime",
+                            text = "${LocalizationHelper.getString(context, R.string.session)}: $sessionTime",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0x80FFFFFF),
                             modifier = Modifier.padding(bottom = 16.dp)
@@ -266,6 +271,7 @@ fun NetworkChartCard(
     currentUploadSpeed: Float,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Card(
         modifier = modifier
             .zIndex(3f) // Высокий уровень для "близкого" элемента
@@ -311,7 +317,7 @@ fun NetworkChartCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Нет данных о сети",
+                        text = LocalizationHelper.getString(context, R.string.no_network_data),
                         color = Color.White.copy(alpha = 0.5f)
                     )
                 }
@@ -328,6 +334,7 @@ fun ChartLegend(
     currentDownloadSpeed: Float,
     currentUploadSpeed: Float
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -343,7 +350,7 @@ fun ChartLegend(
                     .background(color = Color(0xFF4FC3F7), shape = CircleShape)
             )
             Text(
-                text = "Скачивание",
+                text = LocalizationHelper.getString(context, R.string.download),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0x80FFFFFF),
                 modifier = Modifier.padding(start = 8.dp, end = 16.dp)
@@ -360,7 +367,7 @@ fun ChartLegend(
                     .background(color = Color(0xFFFF9800), shape = CircleShape)
             )
             Text(
-                text = "Отдача",
+                text = LocalizationHelper.getString(context, R.string.upload),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0x80FFFFFF),
                 modifier = Modifier.padding(start = 8.dp)
@@ -388,6 +395,7 @@ fun NetworkChart(
     uploadData: List<Point>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val xAxisData = AxisData.Builder()
         .axisStepSize(30.dp) // Изначальный шаг
         .backgroundColor(Color.Transparent)
@@ -485,6 +493,7 @@ fun NetworkStatsRow(
     uploaded: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -494,7 +503,7 @@ fun NetworkStatsRow(
         // Скачано
         StatCard(
             value = downloaded,
-            label = "Скачано",
+            label = LocalizationHelper.getString(context, R.string.downloaded),
             color = Color(0xFF4FC3F7),
             modifier = Modifier.weight(1f)
         )
@@ -502,7 +511,7 @@ fun NetworkStatsRow(
         // Отдано
         StatCard(
             value = uploaded,
-            label = "Отдано",
+            label = LocalizationHelper.getString(context, R.string.uploaded),
             color = Color(0xFFFF9800),
             modifier = Modifier.weight(1f)
         )

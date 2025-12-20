@@ -21,6 +21,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import com.kizvpn.client.ui.theme.KizVpnTheme
 import androidx.compose.material3.MaterialTheme
 import com.kizvpn.client.ui.viewmodel.VpnViewModel
 import com.kizvpn.client.vpn.KizVpnService
+import com.kizvpn.client.security.BiometricAuthManager
 import com.kizvpn.client.util.Logger
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -58,7 +60,7 @@ import android.content.ComponentName
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     
     private val viewModel: VpnViewModel by viewModels()
     private val configParser = ConfigParser()
@@ -67,6 +69,10 @@ class MainActivity : ComponentActivity() {
     private val apiClient = VpnApiClient()
     private lateinit var connectionHistoryManager: com.kizvpn.client.data.ConnectionHistoryManager
     private var connectionStartTime: Long? = null // Время начала подключения для расчета длительности
+    
+    // Биометрическая аутентификация
+    private lateinit var biometricAuthManager: BiometricAuthManager
+    private var isAppAuthenticated = false // Флаг аутентификации
     
     // HTTP client для проверки подключения (с ограничением соединений)
     private val httpClient = OkHttpClient.Builder()
@@ -156,6 +162,9 @@ class MainActivity : ComponentActivity() {
         // Инициализируем менеджер истории подключений
         connectionHistoryManager = com.kizvpn.client.data.ConnectionHistoryManager(this)
         
+        // Инициализируем биометрическую аутентификацию
+        biometricAuthManager = BiometricAuthManager(this)
+        
         // Мигрируем неправильно сохраненные конфиги (если WireGuard конфиг в saved_config, переносим его)
         migrateIncorrectlySavedConfigs()
         migrateOldConfigsToLists() // Мигрируем старые конфиги в новый формат списков
@@ -221,7 +230,7 @@ class MainActivity : ComponentActivity() {
         // Проверяем автоподключение (после проверки статуса VPN)
         lifecycleScope.launch {
             delay(500) // Даем время на проверку статуса VPN
-            checkAutoConnect()
+            checkBiometricAuthenticationIfEnabled()
         }
         
         setContent {
@@ -247,6 +256,40 @@ class MainActivity : ComponentActivity() {
     
     override fun onResume() {
         super.onResume()
+        
+        // Проверяем биометрическую аутентификацию при возврате в приложение
+        val prefs = getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+        val securityEnabled = prefs.getBoolean("security_enabled", false)
+        
+        if (securityEnabled && !isAppAuthenticated && biometricAuthManager.isBiometricAvailable()) {
+            Log.d("MainActivity", "Требуется повторная биометрическая аутентификация")
+            
+            biometricAuthManager.authenticate(
+                activity = this,
+                title = getString(R.string.biometric_title),
+                subtitle = getString(R.string.biometric_subtitle),
+                onSuccess = {
+                    Log.d("MainActivity", "Повторная биометрическая аутентификация успешна")
+                    isAppAuthenticated = true
+                    continueOnResume()
+                },
+                onError = { error ->
+                    Log.e("MainActivity", "Ошибка повторной биометрической аутентификации: $error")
+                    Toast.makeText(this, getString(R.string.authentication_error, error), Toast.LENGTH_LONG).show()
+                    finish()
+                },
+                onCancel = {
+                    Log.d("MainActivity", "Повторная биометрическая аутентификация отменена")
+                    Toast.makeText(this, getString(R.string.authentication_cancelled), Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+            )
+        } else {
+            continueOnResume()
+        }
+    }
+    
+    private fun continueOnResume() {
         // Проверяем статус VPN при возврате в приложение (только если не было ручного отключения)
         // После ручного отключения не проверяем статус сразу, чтобы избежать переподключения
         if (!wasManuallyDisconnected) {
@@ -286,6 +329,13 @@ class MainActivity : ComponentActivity() {
         // Обновление подписки продолжает работать в фоне
         statsUpdateJob?.cancel()
         statsUpdateJob = null
+        
+        // Сбрасываем флаг аутентификации при уходе из приложения
+        val prefs = getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+        val securityEnabled = prefs.getBoolean("security_enabled", false)
+        if (securityEnabled) {
+            isAppAuthenticated = false
+        }
     }
     
     override fun onDestroy() {
@@ -743,6 +793,45 @@ class MainActivity : ComponentActivity() {
                 Logger.error(Logger.Tag.MAIN, "Ошибка при проверке статуса VPN: ${e.message}", e)
                 // В случае ошибки не обновляем статус, чтобы не перезаписать текущее состояние
             }
+        }
+    }
+    
+    /**
+     * Проверка биометрической аутентификации при запуске приложения
+     */
+    private fun checkBiometricAuthenticationIfEnabled() {
+        val prefs = getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+        val securityEnabled = prefs.getBoolean("security_enabled", false)
+        
+        if (securityEnabled && biometricAuthManager.isBiometricAvailable()) {
+            Log.d("MainActivity", "Биометрическая аутентификация включена, запрашиваем аутентификацию...")
+            
+            biometricAuthManager.authenticate(
+                activity = this,
+                title = getString(R.string.biometric_title),
+                subtitle = getString(R.string.biometric_subtitle_app),
+                onSuccess = {
+                    Log.d("MainActivity", "Биометрическая аутентификация успешна")
+                    isAppAuthenticated = true
+                    checkAutoConnect()
+                },
+                onError = { error ->
+                    Log.e("MainActivity", "Ошибка биометрической аутентификации: $error")
+                    Toast.makeText(this, getString(R.string.authentication_error, error), Toast.LENGTH_LONG).show()
+                    // Закрываем приложение при ошибке аутентификации
+                    finish()
+                },
+                onCancel = {
+                    Log.d("MainActivity", "Биометрическая аутентификация отменена")
+                    Toast.makeText(this, getString(R.string.authentication_cancelled), Toast.LENGTH_SHORT).show()
+                    // Закрываем приложение при отмене аутентификации
+                    finish()
+                }
+            )
+        } else {
+            // Биометрия отключена или недоступна - продолжаем обычную загрузку
+            isAppAuthenticated = true
+            checkAutoConnect()
         }
     }
     

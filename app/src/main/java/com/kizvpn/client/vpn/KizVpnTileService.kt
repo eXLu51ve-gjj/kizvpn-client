@@ -13,6 +13,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 import com.kizvpn.client.R
+import androidx.core.app.NotificationCompat
 
 /**
  * Quick Settings Tile для быстрого включения/выключения VPN
@@ -23,10 +24,27 @@ class KizVpnTileService : TileService() {
     private var vpnService: KizVpnService? = null
     private var isBound = false
     
+    /**
+     * Проверяет, активен ли именно наш VPN (KIZ VPN)
+     */
+    private val isOurVpnActive: Boolean
+        get() {
+            val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+            return prefs.getBoolean("is_connected", false)
+        }
+    
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.d(TAG, "Received VPN state broadcast")
-            updateTileState()
+            when (intent?.action) {
+                "com.kizvpn.client.VPN_STATE_CHANGED" -> {
+                    Log.d(TAG, "Received VPN state broadcast")
+                    updateTileState()
+                }
+                "com.kizvpn.client.VPN_CONFLICT" -> {
+                    Log.d(TAG, "Received VPN conflict broadcast")
+                    showVpnConflictNotification()
+                }
+            }
         }
     }
     
@@ -50,8 +68,11 @@ class KizVpnTileService : TileService() {
         super.onStartListening()
         Log.d(TAG, "Tile started listening")
         
-        // Регистрируем BroadcastReceiver для обновления плитки
-        val filter = IntentFilter("com.kizvpn.client.VPN_STATE_CHANGED")
+        // Регистрируем BroadcastReceiver для обновления плитки и обработки конфликтов VPN
+        val filter = IntentFilter().apply {
+            addAction("com.kizvpn.client.VPN_STATE_CHANGED")
+            addAction("com.kizvpn.client.VPN_CONFLICT")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(vpnStateReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
@@ -131,6 +152,17 @@ class KizVpnTileService : TileService() {
         Log.d(TAG, "Attempting to connect VPN from tile")
         
         try {
+            // Проверяем разрешение VPN
+            val vpnIntent = android.net.VpnService.prepare(this)
+            if (vpnIntent != null) {
+                Log.w(TAG, "VPN permission not granted, opening app")
+                // Открываем приложение для получения разрешения VPN
+                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return
+            }
+            
             // Получаем сохранённый конфиг
             val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
             val activeConfigType = prefs.getString("active_config_type", null)
@@ -149,6 +181,13 @@ class KizVpnTileService : TileService() {
                 return
             }
             
+            // Проверяем, не активен ли уже другой VPN
+            // Если prepare() возвращает null, но наш VPN не подключен, 
+            // мы все равно попытаемся подключиться - KizVpnService обработает конфликт
+            if (!isOurVpnActive) {
+                Log.d(TAG, "Our VPN is not active, attempting to connect")
+            }
+            
             // Запускаем VPN сервис с правильным action
             val intent = Intent(this, KizVpnService::class.java).apply {
                 action = "com.kizvpn.client.START"
@@ -164,6 +203,7 @@ class KizVpnTileService : TileService() {
             Log.d(TAG, "VPN connection initiated from tile with config: ${config.take(50)}...")
         } catch (e: Exception) {
             Log.e(TAG, "Error connecting VPN from tile", e)
+            showErrorNotification("Ошибка подключения VPN: ${e.message}")
         }
     }
     
@@ -202,6 +242,82 @@ class KizVpnTileService : TileService() {
         tile.icon = Icon.createWithResource(this, R.drawable.kiz_vpn_mono)
         
         tile.updateTile()
+    }
+    
+    /**
+     * Показать уведомление о конфликте с другим VPN
+     */
+    private fun showVpnConflictNotification() {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        
+        // Создаем канал уведомлений если нужно
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                "kiz_vpn_alerts",
+                "KIZ VPN Alerts",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        // Создаем intent для открытия приложения
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = androidx.core.app.NotificationCompat.Builder(this, "kiz_vpn_alerts")
+            .setSmallIcon(R.drawable.kiz_vpn_mono)
+            .setContentTitle("KIZ VPN")
+            .setContentText("Другой VPN активен. Отключите его и попробуйте снова.")
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle()
+                .bigText("Обнаружен активный VPN-клиент. Для подключения KIZ VPN необходимо сначала отключить другой VPN в настройках системы."))
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        
+        notificationManager.notify(1001, notification)
+        Log.d(TAG, "VPN conflict notification shown")
+    }
+    
+    /**
+     * Показать уведомление об ошибке
+     */
+    private fun showErrorNotification(message: String) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        
+        // Создаем канал уведомлений если нужно
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                "kiz_vpn_alerts",
+                "KIZ VPN Alerts",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        // Создаем intent для открытия приложения
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = androidx.core.app.NotificationCompat.Builder(this, "kiz_vpn_alerts")
+            .setSmallIcon(R.drawable.kiz_vpn_mono)
+            .setContentTitle("KIZ VPN - Ошибка")
+            .setContentText(message)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        
+        notificationManager.notify(1002, notification)
+        Log.d(TAG, "Error notification shown: $message")
     }
 }
 

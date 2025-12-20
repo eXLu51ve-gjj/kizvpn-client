@@ -55,7 +55,6 @@
     <string name="share">Поделиться</string>
     <string name="delete">Удалить</string>
     <string name="save_config">Сохранить конфиг</string>
-    <string name="saving">Сохранение...</string>
     <string name="days_hours">%1$d дн. %2$d ч.</string>
     <string name="days_only">%1$d дн.</string>
     <string name="not_activated">Не активирован</string>
@@ -67,5 +66,93 @@
     <string name="error_vpn_not_supported">VPN не поддерживается на этом устройстве</string>
     <string name="error_permission_denied">Требуется разрешение VPN</string>
     <string name="error_connection_failed">Ошибка подключения</string>
+    
+    <!-- Security -->
+    <string name="security">Безопасность</string>
+    
+    <!-- About App -->
+    <string name="app_subtitle">Ваша анонимность и безопасность в сети</string>
+    <string name="app_description">Простой и бесплатный VPN для защиты вашего подключения к интернету.\n\nОбеспечивает анонимность и безопасность, чтобы вы могли серфить в сети спокойно.</string>
+    <string name="what_we_offer">Что мы предлагаем</string>
+    <string name="privacy_protection">Защита приватности: Ваши данные под надёжной защитой.</string>
+    <string name="high_speed">Высокая скорость: Стабильное и быстрое соединение.</string>
+    <string name="completely_free">Полностью бесплатно: Никаких скрытых платежей.</string>
+    <string name="easy_to_use">Простота в использовании: Подключение одним нажатием.</string>
+    <string name="important">Важно</string>
+    <string name="beta_warning">Приложение находится на стадии тестирования!\n\nМы активно работаем над его улучшением.\n\nЕсли вы столкнётесь с ошибками или багами\nПожалуйста, сообщите нам — ваша помощь бесценна!</string>
+    <string name="contact_developer">Связь с разработчиком</string>
+    <string name="version_text">Версия %1$s</string>
+    
+    <!-- Statistics -->
+    <string name="statistics_title">Статистика</string>
+    <string name="traffic_title">Трафик</string>
+    <string name="incoming_traffic">Входящий: %1$s</string>
+    <string name="outgoing_traffic">Исходящий: %1$s</string>
+    
+    <!-- History -->
+    <string name="connection_history">История подключений</string>
+    <string name="history_empty">История подключений будет отображаться здесь</string>
+    <string name="server_label">Сервер: %1$s</string>
+    <string name="duration_label">Длительность: %1$s</string>
+    
+    <!-- VPN Config -->
+    <string name="subscriptions_title">Подписки</string>
+    <string name="separate_keys">Отдельные ключи</string>
+    <string name="ping_all">Пинг всех</string>
+    <string name="config_label">Конфиг</string>
+    <string name="paste_vless_key">Вставьте ключ Vless</string>
+    <string name="paste_wireguard_config">Вставьте WireGuard конфиг в поле ниже</string>
+    
+    <!-- VPN Config Modal -->
+    <string name="separate_configs">Отдельные ключи</string>
+    <string name="config_count">Количество ключей</string>
+    <string name="network_statistics">Статистика сети</string>
+    <string name="session">Сессия</string>
+    <string name="download">Скачивание</string>
+    <string name="upload">Отдача</string>
+    <string name="downloaded">Скачано</string>
+    <string name="uploaded">Отдано</string>
+    
+    <!-- Biometric Authentication -->
+    <string name="biometric_title">Безопасный доступ</string>
+    <string name="biometric_subtitle">Подтвердите свою личность для продолжения работы</string>
+    <string name="biometric_subtitle_app">Подтвердите свою личность для доступа к KIZ VPN</string>
+    <string name="authentication_error">Ошибка аутентификации: %1$s</string>
+    <string name="authentication_cancelled">Аутентификация отменена</string>
+    
+    <!-- Menu Items -->
+    <string name="menu_text">Меню</string>
+    
+    <!-- Common Actions -->
+    <string name="back">Назад</string>
+    <string name="open_email">Открыть почту</string>
+    <string name="qr_code">QR-код</string>
+    <string name="no_network_data">Нет данных о сети</string>
+    
+    <!-- Additional strings for modals -->
+    <string name="no_subscriptions">Нет подписок</string>
+    <string name="click_to_add">Нажмите + чтобы добавить</string>
+    <string name="add_subscription">Добавить подписку</string>
+    <string name="enter_subscription_url">Введите Subscription URL, VLESS ключ или WireGuard конфиг</string>
+    <string name="search_apps">Поиск приложений...</string>
+    <string name="settings_title">Настройки</string>
+    <string name="found_endpoints">Найдено: %1$d из %2$d</string>
+    <string name="response_preview">Ответ: %1$s</string>
+    <string name="no_endpoints_found">Доступные endpoints не найдены</string>
+    
+    <!-- Additional modal strings -->
+    <string name="activating">Активация...</string>
+    <string name="activate">Активировать</string>
+    <string name="saving">Сохранение...</string>
+    <string name="save">Сохранить</string>
+    <string name="add">Добавить</string>
+    <string name="cancel">Отмена</string>
+    <string name="copied">Скопировано!</string>
+    <string name="checking">Проверка...</string>
+    <string name="check">Проверить</string>
+    <string name="check_api_endpoints">Проверить API endpoints</string>
+    <string name="expired_status">истекла</string>
+    <string name="no_configs">нет конфигов</string>
+    <string name="subscription_added_status">Подписка добавлена (%1$s)</string>
 </resources>
 

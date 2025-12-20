@@ -10,7 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.kizvpn.client.R
 import com.kizvpn.client.ui.models.ConnectionStatus
 import com.kizvpn.client.ui.theme.*
 import com.kizvpn.client.ui.viewmodel.VpnViewModel
@@ -79,7 +81,7 @@ fun StatisticsScreen(
         TopAppBar(
             title = {
                 Text(
-                    "Статистика",
+                    stringResource(R.string.statistics_title),
                     color = TextPrimary
                 )
             },
@@ -87,7 +89,7 @@ fun StatisticsScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.Default.ArrowBack,
-                        contentDescription = "Назад",
+                        contentDescription = stringResource(R.string.logout),
                         tint = TextPrimary
                     )
                 }

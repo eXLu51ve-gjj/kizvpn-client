@@ -219,6 +219,20 @@ public class KizVpnService extends VpnService implements SocketProtect {
                 }
             }
         });
+        
+        // Также отправляем broadcast для TileService если это ошибка VPN конфликта
+        if (msg.contains("Another VPN might be active")) {
+            sendVpnConflictBroadcast();
+        }
+    }
+    
+    /**
+     * Отправить broadcast о конфликте VPN
+     */
+    private void sendVpnConflictBroadcast() {
+        Intent conflictIntent = new Intent("com.kizvpn.client.VPN_CONFLICT");
+        sendBroadcast(conflictIntent);
+        Log.d(TAG, "VPN conflict broadcast sent");
     }
     
     private void updateCommand(Command command) {
@@ -556,9 +570,14 @@ public class KizVpnService extends VpnService implements SocketProtect {
                 return true;
             } else {
                 Log.e(TAG, "Failed to establish VPN interface - fileDescriptor is null");
-                sendMessage("Error: Failed to create VPN interface. Check VPN permissions.");
+                Log.e(TAG, "This usually means another VPN is active or VPN permission was revoked");
+                sendMessage("Error: Cannot create VPN interface. Another VPN might be active or VPN permission was revoked.");
                 return false;
             }
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException while creating VPN interface - VPN permission denied", e);
+            sendMessage("Error: VPN permission denied. Please grant VPN permission in app settings.");
+            return false;
         } catch (Exception e) {
             Log.e(TAG, "Exception while creating VPN interface", e);
             sendMessage("Error: Exception creating VPN interface: " + e.getMessage());
