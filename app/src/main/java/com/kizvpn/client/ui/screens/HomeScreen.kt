@@ -69,6 +69,7 @@ import com.kizvpn.client.ui.theme.CardDark
 import com.kizvpn.client.ui.theme.TextPrimary
 import com.kizvpn.client.ui.theme.TextSecondary
 import com.kizvpn.client.data.SubscriptionInfo
+import com.kizvpn.client.util.localizedString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +96,11 @@ fun HomeScreen(
 ) {
     val isConnected = connectionStatus.isConnected
     val isConnecting = connectionStatus.isConnecting
+    
+    // Локализованные строки
+    val subscriptionText = localizedString(R.string.subscription_single)
+    val connectedText = localizedString(R.string.connected)
+    val disconnectedText = localizedString(R.string.disconnected)
     
     val connectColor by animateColorAsState(
         targetValue = when {
@@ -145,7 +151,7 @@ fun HomeScreen(
     LaunchedEffect(subscriptionInfo) {
         subscriptionInfo?.let { info ->
             if (!info.expired && (info.days > 0 || info.hours > 0 || info.unlimited)) {
-                subscriptionNotificationText = "Подписка: ${info.format()}"
+                subscriptionNotificationText = "$subscriptionText: ${info.format()}"
                 showSubscriptionNotification = true
                 delay(3000) // Показываем 3 секунды
                 showSubscriptionNotification = false
@@ -156,7 +162,7 @@ fun HomeScreen(
     // Показываем уведомление при изменении статуса подключения (только сверху)
     LaunchedEffect(isConnected) {
         if (previousConnectionState != null && previousConnectionState != isConnected) {
-            connectionNotificationText = if (isConnected) "Подключено" else "Отключено"
+            connectionNotificationText = if (isConnected) connectedText else disconnectedText
             showConnectionNotification = true
             delay(3000) // Показываем 3 секунды
             showConnectionNotification = false

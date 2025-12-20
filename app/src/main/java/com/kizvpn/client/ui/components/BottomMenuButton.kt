@@ -594,9 +594,9 @@ fun AboutModal(
     val versionName = remember {
         try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName ?: "2.2.1"
+            packageInfo.versionName ?: "2.2.2"
         } catch (e: Exception) {
-            "2.2.1"
+            "2.2.2"
         }
     }
     
@@ -733,6 +733,8 @@ fun AboutModal(
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null, // Убираем визуальный эффект нажатия
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onDismiss()
@@ -3095,7 +3097,7 @@ fun SettingsModal(
                                 .align(Alignment.CenterStart)
                                 .offset(x = (-26).dp)
                                 .size(26.dp),
-                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                            colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                         )
                         // Фиолетовая точка справа
                         Box(
@@ -3120,7 +3122,14 @@ fun SettingsModal(
                             title = localizedString(R.string.auto_connect),
                             description = "",
                             checked = useAutoConnect,
-                            onCheckedChange = { useAutoConnect = it },
+                            onCheckedChange = { newValue ->
+                                useAutoConnect = newValue
+                                // Сохраняем в SharedPreferences
+                                context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putBoolean("auto_connect", newValue)
+                                    .apply()
+                            },
                             zenterFontFamily = zenterFontFamily,
                             iconResId = R.drawable.off_on
                         )
@@ -3132,7 +3141,7 @@ fun SettingsModal(
                                 .align(Alignment.CenterStart)
                                 .offset(x = (-26).dp)
                                 .size(26.dp),
-                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                            colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                         )
                     }
                 }
@@ -3146,7 +3155,14 @@ fun SettingsModal(
                             title = localizedString(R.string.notifications),
                             description = "",
                             checked = useNotifications,
-                            onCheckedChange = { useNotifications = it },
+                            onCheckedChange = { newValue ->
+                                useNotifications = newValue
+                                // Сохраняем в SharedPreferences
+                                context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putBoolean("notifications_enabled", newValue)
+                                    .apply()
+                            },
                             zenterFontFamily = zenterFontFamily,
                             iconResId = R.drawable.off_on
                         )
@@ -3158,7 +3174,7 @@ fun SettingsModal(
                                 .align(Alignment.CenterStart)
                                 .offset(x = (-26).dp)
                                 .size(26.dp),
-                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                            colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                         )
                     }
                 }
@@ -3190,7 +3206,7 @@ fun SettingsModal(
                                 .align(Alignment.CenterStart)
                                 .offset(x = (-26).dp)
                                 .size(26.dp),
-                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                            colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                         )
                     }
                 }
@@ -3204,7 +3220,14 @@ fun SettingsModal(
                             title = "Безопасность",
                             description = "",
                             checked = securityEnabled,
-                            onCheckedChange = { securityEnabled = it },
+                            onCheckedChange = { newValue ->
+                                securityEnabled = newValue
+                                // Сохраняем в SharedPreferences
+                                context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putBoolean("security_enabled", newValue)
+                                    .apply()
+                            },
                             zenterFontFamily = zenterFontFamily,
                             iconResId = R.drawable.off_on
                         )
@@ -3216,7 +3239,7 @@ fun SettingsModal(
                                 .align(Alignment.CenterStart)
                                 .offset(x = (-26).dp)
                                 .size(26.dp),
-                            colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                            colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                         )
                     }
                 }

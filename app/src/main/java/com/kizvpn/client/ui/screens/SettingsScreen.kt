@@ -27,6 +27,8 @@ import com.kizvpn.client.ui.theme.TextPrimary
 import com.kizvpn.client.ui.theme.TextSecondary
 import com.kizvpn.client.ui.theme.CardDark
 import com.kizvpn.client.data.SubscriptionInfo
+import com.kizvpn.client.util.localizedString
+import com.kizvpn.client.R
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -255,7 +257,7 @@ fun SettingsScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "Версия 2.2.1",
+                            text = localizedString(R.string.version).format("2.2.2"),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                             modifier = Modifier.padding(top = 4.dp)
