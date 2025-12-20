@@ -164,7 +164,39 @@ class MainActivity : ComponentActivity() {
         loadSavedConfig()
         
         // Загружаем сохраненную информацию о подписке
-        loadSubscriptionInfo()
+        val savedConfig = getSavedConfig()
+        if (!savedConfig.isNullOrBlank()) {
+            // Есть сохраненный конфиг - загружаем информацию о подписке
+            val savedSubscriptionInfo = loadSubscriptionInfo()
+            if (savedSubscriptionInfo != null) {
+                this.subscriptionInfo = savedSubscriptionInfo
+                this.subscriptionInfoState.value = savedSubscriptionInfo
+                viewModel.updateSubscriptionInfo(savedSubscriptionInfo)
+                Log.d("MainActivity", "Loaded subscription info on startup: ${savedSubscriptionInfo.format()}")
+            } else {
+                Log.d("MainActivity", "No saved subscription info found for existing config")
+            }
+        } else {
+            // Нет конфига - очищаем старые данные о подписке (исправляем проблему с 363 днями)
+            Log.d("MainActivity", "No config found on startup, clearing old subscription data")
+            val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove("subscription_days")
+                .remove("subscription_hours")
+                .remove("subscription_unlimited")
+                .remove("subscription_expired")
+                .remove("subscription_expiry_date")
+                .remove("subscription_total_traffic")
+                .remove("subscription_used_traffic")
+                .remove("subscription_remaining_traffic")
+                .remove("subscription_configs_count")
+                .apply()
+            
+            // Также очищаем состояние в UI
+            this.subscriptionInfo = null
+            this.subscriptionInfoState.value = null
+            viewModel.updateSubscriptionInfo(null)
+        }
         
         // Периодическое обновление подписки отключено - проверка только при включении VPN
         
@@ -382,6 +414,23 @@ class MainActivity : ComponentActivity() {
         
         Logger.vpnConnecting(Logger.Tag.MAIN, "Starting VPN connection...")
         
+        // ВАЖНО: Всегда используем текущий активный конфиг, а не переданный configString
+        val currentActiveConfig = getSavedConfig()
+        if (currentActiveConfig.isNullOrBlank()) {
+            Log.e("MainActivity", "startVpnConnection: No active config found!")
+            viewModel.updateConnectionStatus(
+                viewModel.connectionStatus.value.copy(
+                    isConnected = false,
+                    isConnecting = false
+                )
+            )
+            showNotification("Ошибка: нет активного конфига", 4000)
+            isVpnOperationInProgress.set(false)
+            return
+        }
+        
+        Log.d("MainActivity", "startVpnConnection: Using current active config (length: ${currentActiveConfig.length})")
+        
         // Обновляем состояние СИНХРОННО ПЕРЕД запуском асинхронной операции
         viewModel.updateConnectionStatus(
             viewModel.connectionStatus.value.copy(isConnecting = true)
@@ -389,13 +438,13 @@ class MainActivity : ComponentActivity() {
         
         lifecycleScope.launch {
             try {
-                // Запускаем VPN сервис
+                // Запускаем VPN сервис с текущим активным конфигом
                 val serviceIntent = Intent(this@MainActivity, KizVpnService::class.java).apply {
-                    putExtra("config", configString)
+                    putExtra("config", currentActiveConfig)
                     action = "com.kizvpn.client.START"
                 }
                 
-                Logger.info(Logger.Tag.MAIN, "Starting VPN service with config length: ${configString.length}")
+                Logger.info(Logger.Tag.MAIN, "Starting VPN service with current active config length: ${currentActiveConfig.length}")
                 startForegroundService(serviceIntent)
                 
                 // Ждем установления соединения (увеличено до 3 секунд для надежности)
@@ -449,7 +498,59 @@ class MainActivity : ComponentActivity() {
                     lifecycleScope.launch {
                         // Небольшая задержка, чтобы уведомление о подключении успело показаться
                         delay(1500)
-                        checkSubscriptionFromConfig(configString)
+                        // Сначала обновляем подписку из subscription_blocks (если конфиг там есть)
+                        refreshActiveSubscriptionFromBlocks(configString)
+                        
+                        // Обновляем информацию о подписке при подключении VPN (только обновляем, не очищаем)
+                        // ВАЖНО: Используем getSavedConfig() чтобы получить текущий активный конфиг
+                        val currentActiveConfig = getSavedConfig()
+                        Log.d("MainActivity", "VPN connected: getting current active config...")
+                        Log.d("MainActivity", "VPN connected: currentActiveConfig length = ${currentActiveConfig?.length ?: 0}")
+                        
+                        if (!currentActiveConfig.isNullOrBlank()) {
+                            val parsedConfig = configParser.parseConfig(currentActiveConfig)
+                            val configKey = parsedConfig?.uuid ?: parsedConfig?.name ?: parsedConfig?.comment
+                            
+                            Log.d("MainActivity", "VPN connected: checking subscription for active config")
+                            Log.d("MainActivity", "VPN connected: configKey = $configKey")
+                            
+                            if (configKey != null) {
+                                val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+                                val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
+                                Log.d("MainActivity", "VPN connected: savedSubscriptionUrl = ${savedSubscriptionUrl?.take(50)}...")
+                                
+                                if (!savedSubscriptionUrl.isNullOrBlank()) {
+                                    // Сначала загружаем сохраненную информацию о подписке для немедленного отображения
+                                    Log.d("MainActivity", "VPN connected: loading saved subscription info first...")
+                                    val savedSubscriptionInfo = loadSubscriptionInfo()
+                                    if (savedSubscriptionInfo != null) {
+                                        Log.d("MainActivity", "VPN connected: ✓ Loaded saved subscription info, displaying immediately")
+                                        this@MainActivity.subscriptionInfo = savedSubscriptionInfo
+                                        this@MainActivity.subscriptionInfoState.value = savedSubscriptionInfo
+                                        viewModel.updateSubscriptionInfo(savedSubscriptionInfo)
+                                    } else {
+                                        Log.d("MainActivity", "VPN connected: No saved subscription info found")
+                                    }
+                                    
+                                    // Затем обновляем информацию с сервера для получения актуальных данных
+                                    Log.d("MainActivity", "VPN connected: updating subscription URL info from server for fresh data")
+                                    checkSubscriptionFromUrl(savedSubscriptionUrl, forceUpdate = true)
+                                } else {
+                                    Log.d("MainActivity", "VPN connected: standalone config, keeping existing subscription info (not clearing)")
+                                    // Для standalone конфигов НЕ очищаем информацию о подписке
+                                    // Подписка должна быть постоянной как в шторке уведомлений
+                                    // VPN подключение только обновляет данные, но не очищает их
+                                }
+                            } else {
+                                Log.d("MainActivity", "VPN connected: no config key found, keeping existing subscription info")
+                                // Нет ключа конфига - НЕ очищаем информацию о подписке
+                                // Сохраняем принцип постоянства как в шторке уведомлений
+                            }
+                        } else {
+                            Log.w("MainActivity", "VPN connected: no active config found, keeping existing subscription info")
+                            // Нет активного конфига - НЕ очищаем информацию о подписке
+                            // Подписка должна оставаться видимой независимо от состояния VPN
+                        }
                     }
                 } else {
                     Logger.vpnError(Logger.Tag.MAIN, "VPN service not running after start")
@@ -693,7 +794,7 @@ class MainActivity : ComponentActivity() {
             var isFirstUpdate = true
             
             while (viewModel.connectionStatus.value.isConnected) {
-                delay(2000) // Увеличено с 1 до 2 секунд для уменьшения нагрузки
+                delay(1000) // Уменьшено до 1 секунды для более частого обновления скорости
                 
                 try {
                     // Получаем реальную статистику через TrafficStats
@@ -731,6 +832,9 @@ class MainActivity : ComponentActivity() {
                             // Всегда обновляем статистику при каждом обновлении
                             // ViewModel вычислит скорость из разницы байтов
                             viewModel.updateTrafficStats(uploadBytes, downloadBytes)
+                            
+                            // Обновляем скорость в VPN сервисе для уведомления
+                            updateVpnServiceSpeed(downloadBytes, uploadBytes)
                         } else {
                             // Если TrafficStats недоступен, используем симуляцию
                             throw Exception("TrafficStats недоступен")
@@ -779,6 +883,78 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    
+    /**
+     * Обновление скорости в VPN сервисе для уведомления
+     */
+    private fun updateVpnServiceSpeed(downloadBytes: Long, uploadBytes: Long) {
+        try {
+            val serviceIntent = Intent(this, KizVpnService::class.java)
+            bindService(serviceIntent, object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                    val binder = service as? KizVpnService.KizVpnBinder
+                    
+                    // Вычисляем скорость (примерно) - используем данные из ViewModel
+                    val currentSpeed = viewModel.currentSpeed.value // KB/s
+                    val downloadSpeed = (currentSpeed * 0.7 * 1024).toLong() // 70% на загрузку, конвертируем в байты/сек
+                    val uploadSpeed = (currentSpeed * 0.3 * 1024).toLong() // 30% на отдачу, конвертируем в байты/сек
+                    
+                    Log.d("MainActivity", "Updating VPN service speed: download=${downloadSpeed}B/s, upload=${uploadSpeed}B/s (total=${currentSpeed}KB/s)")
+                    binder?.updateSpeed(downloadSpeed.coerceAtLeast(0), uploadSpeed.coerceAtLeast(0))
+                    unbindService(this)
+                }
+                override fun onServiceDisconnected(name: ComponentName?) {}
+            }, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error updating VPN service speed", e)
+        }
+    }
+    
+    /**
+     * Обновление пинга в VPN сервисе для уведомления
+     */
+    private fun updateVpnServicePing(ping: Int) {
+        try {
+            val serviceIntent = Intent(this, KizVpnService::class.java)
+            bindService(serviceIntent, object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                    val binder = service as? KizVpnService.KizVpnBinder
+                    binder?.updatePing(ping)
+                    unbindService(this)
+                }
+                override fun onServiceDisconnected(name: ComponentName?) {}
+            }, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error updating VPN service ping", e)
+        }
+    }
+    
+    /**
+     * Полная очистка информации о подписке
+     */
+    private fun clearAllSubscriptionInfo() {
+        Log.d("MainActivity", "clearAllSubscriptionInfo: Очищаем всю информацию о подписке")
+        
+        val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove("subscription_days")
+            .remove("subscription_hours")
+            .remove("subscription_unlimited")
+            .remove("subscription_expired")
+            .remove("subscription_expiry_date")
+            .remove("subscription_total_traffic")
+            .remove("subscription_used_traffic")
+            .remove("subscription_remaining_traffic")
+            .remove("subscription_configs_count")
+            .apply()
+        
+        // Очищаем состояние в UI
+        this.subscriptionInfo = null
+        this.subscriptionInfoState.value = null
+        viewModel.updateSubscriptionInfo(null)
+        
+        Log.d("MainActivity", "clearAllSubscriptionInfo: ✓ Информация о подписке очищена")
     }
     
     /**
@@ -919,6 +1095,18 @@ class MainActivity : ComponentActivity() {
             editor.commit()
             
             Log.d("MainActivity", "saveConfig: Конфиг добавлен в список, active_config_type = $configType")
+            
+            // Проверяем, является ли это standalone конфигом (не из subscription URL)
+            val configKey = parsedConfig.uuid ?: parsedConfig.name ?: "default"
+            val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
+            
+            if (savedSubscriptionUrl.isNullOrBlank()) {
+                // Это standalone конфиг - очищаем информацию о подписке
+                Log.d("MainActivity", "saveConfig: Standalone конфиг, очищаем подписку")
+                clearAllSubscriptionInfo()
+            } else {
+                Log.d("MainActivity", "saveConfig: Конфиг из subscription URL, сохраняем подписку")
+            }
         } catch (e: Exception) {
             Log.e("MainActivity", "saveConfig: Ошибка при сохранении конфига в список", e)
             // Fallback: сохраняем как раньше (один конфиг)
@@ -939,6 +1127,18 @@ class MainActivity : ComponentActivity() {
             }
             editor.putString("active_config_type", configType)
             editor.commit()
+            
+            // Проверяем, является ли это standalone конфигом (не из subscription URL)
+            val configKey = parsedConfig.uuid ?: parsedConfig.name ?: "default"
+            val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
+            
+            if (savedSubscriptionUrl.isNullOrBlank()) {
+                // Это standalone конфиг - очищаем информацию о подписке
+                Log.d("MainActivity", "saveConfig (fallback): Standalone конфиг, очищаем подписку")
+                clearAllSubscriptionInfo()
+            } else {
+                Log.d("MainActivity", "saveConfig (fallback): Конфиг из subscription URL, сохраняем подписку")
+            }
         }
     }
     
@@ -1073,247 +1273,71 @@ class MainActivity : ComponentActivity() {
     }
     
     /**
-     * Проверка подписки на основе конфига
-     * Сначала проверяет сохраненный Subscription URL для этого конфига
-     * Если Subscription URL есть - всегда использует его для получения актуальных данных
+     * Проверка подписки для конфига
+     * Логика:
+     * 1. Если у конфига есть subscription URL - обновляем информацию
+     * 2. Если это отдельный ключ - очищаем информацию только при смене типа конфига
+     * 3. При переключении VPN информация сохраняется
      */
     private fun checkSubscriptionFromConfig(config: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val parsedConfig = configParser.parseConfig(config)
-                Log.d("MainActivity", "Parsed config: uuid=${parsedConfig?.uuid}, protocol=${parsedConfig?.protocol}, name=${parsedConfig?.name}")
+                Log.d("MainActivity", "checkSubscriptionFromConfig: uuid=${parsedConfig?.uuid}, protocol=${parsedConfig?.protocol}, name=${parsedConfig?.name}")
                 
                 // Обновляем время последней проверки
                 lastSubscriptionCheckTime = System.currentTimeMillis()
                 
-                // ПЕРВЫМ ДЕЛОМ проверяем, есть ли сохраненный Subscription URL для этого конфига
                 val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-                val configKey = parsedConfig?.uuid ?: parsedConfig?.name
+                val configKey = parsedConfig?.uuid ?: parsedConfig?.name ?: parsedConfig?.comment
                 
                 if (configKey != null) {
                     val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
                     if (!savedSubscriptionUrl.isNullOrBlank()) {
-                        Log.d("MainActivity", "checkSubscriptionFromConfig: Found saved subscription URL for config, checking for fresh data...")
-                        // Всегда проверяем Subscription URL для получения актуальных данных
+                        Log.d("MainActivity", "checkSubscriptionFromConfig: Config has subscription URL, updating info...")
+                        // Конфиг из subscription URL - всегда обновляем информацию
                         withContext(Dispatchers.Main) {
                             checkSubscriptionFromUrl(savedSubscriptionUrl)
                         }
-                        return@launch // Выходим, так как Subscription URL уже проверили
+                        return@launch
                     } else {
-                        Log.d("MainActivity", "checkSubscriptionFromConfig: No saved subscription URL found for config key: $configKey")
-                    }
-                }
-                
-                // Для WireGuard конфигов пытаемся извлечь UUID из имени конфига или примечания
-                var uuidToCheck: String? = parsedConfig?.uuid
-                
-                if (parsedConfig != null && uuidToCheck.isNullOrBlank() && parsedConfig.protocol == com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                    // Для WireGuard конфигов пытаемся найти UUID в имени конфига или примечании
-                    // В 3x-ui WireGuard конфиги могут иметь имена вида "Email user30@vpn.local"
-                    // или содержать UUID в имени/примечании
-                    val name = parsedConfig.name
-                    val comment = parsedConfig.comment // Примечание из конфига
-                    
-                    // Логируем полную информацию о конфиге для отладки
-                    Log.d("MainActivity", "=== WireGuard Config Analysis ===")
-                    Log.d("MainActivity", "Config name: $name")
-                    Log.d("MainActivity", "Config comment: $comment")
-                    Log.d("MainActivity", "Full config length: ${parsedConfig.rawConfig.length} chars")
-                    Log.d("MainActivity", "Full config content:\n${parsedConfig.rawConfig}")
-                    Log.d("MainActivity", "Config preview (first 500 chars): ${parsedConfig.rawConfig.take(500)}")
-                    
-                    // Функция для поиска UUID в тексте (поддерживает формат с дефисами и без)
-                    fun findUuidInText(text: String?): String? {
-                        if (text.isNullOrBlank()) return null
-                        // Стандартный формат UUID с дефисами: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-                        val uuidPatternWithDashes = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOption.IGNORE_CASE)
-                        val uuidMatchWithDashes = uuidPatternWithDashes.find(text)
-                        if (uuidMatchWithDashes != null) {
-                            return uuidMatchWithDashes.value
-                        }
-                        // Формат UUID без дефисов: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (32 hex символа)
-                        val uuidPatternWithoutDashes = Regex("[0-9a-fA-F]{32}", RegexOption.IGNORE_CASE)
-                        val uuidMatchWithoutDashes = uuidPatternWithoutDashes.find(text)
-                        if (uuidMatchWithoutDashes != null) {
-                            val uuidWithoutDashes = uuidMatchWithoutDashes.value
-                            // Преобразуем в формат с дефисами для единообразия
-                            return "${uuidWithoutDashes.substring(0, 8)}-${uuidWithoutDashes.substring(8, 12)}-${uuidWithoutDashes.substring(12, 16)}-${uuidWithoutDashes.substring(16, 20)}-${uuidWithoutDashes.substring(20, 32)}"
-                        }
-                        return null
-                    }
-                    
-                    // Сохраняем комментарий для возможного использования как идентификатор
-                    var commentToUse: String? = null
-                    
-                    // Сначала проверяем примечание (комментарий) из конфига
-                    // ConfigParser теперь фильтрует -1 и числовые значения, но на всякий случай проверяем еще раз
-                    if (!comment.isNullOrBlank() && comment.trim() != "-1" && !comment.trim().matches(Regex("^-?\\d+$"))) {
-                        Log.d("MainActivity", "WireGuard config comment: $comment, trying to extract UUID or email")
-                        commentToUse = comment.trim() // Сохраняем комментарий для возможного использования
-                        
-                        val uuidFromComment = findUuidInText(comment)
-                        if (uuidFromComment != null) {
-                            uuidToCheck = uuidFromComment
-                            Log.d("MainActivity", "Found UUID in WireGuard config comment: $uuidToCheck")
-                        } else {
-                            // Пытаемся найти email в примечании
-                            val emailPattern = Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
-                            val emailMatch = emailPattern.find(comment)
-                            if (emailMatch != null) {
-                                val email = emailMatch.value
-                                Log.d("MainActivity", "Found email in WireGuard config comment: $email")
-                                commentToUse = email // Используем email как идентификатор
-                                // TODO: Поиск UUID по email через API
-                            } else {
-                                // Комментарий может быть идентификатором клиента в 3x-ui (например, "fsaad-1")
-                                Log.d("MainActivity", "Comment is not UUID or email, but may be a client identifier: $comment")
-                                Log.d("MainActivity", "Will try to use comment as identifier for subscription check")
-                            }
-                        }
-                    } else if (!comment.isNullOrBlank()) {
-                        Log.d("MainActivity", "WireGuard config comment filtered out (invalid): $comment")
-                    }
-                    
-                    // Также проверяем весь конфиг (rawConfig) на наличие UUID
-                    if (uuidToCheck.isNullOrBlank()) {
-                        Log.d("MainActivity", "WireGuard config comment is empty or invalid, checking rawConfig for UUID")
-                        // Логируем больше конфига для отладки (первые 1000 символов)
-                        val configPreview = parsedConfig.rawConfig.take(1000)
-                        Log.d("MainActivity", "WireGuard config preview (first 1000 chars): $configPreview")
-                        val uuidFromRawConfig = findUuidInText(parsedConfig.rawConfig)
-                        if (uuidFromRawConfig != null) {
-                            uuidToCheck = uuidFromRawConfig
-                            Log.d("MainActivity", "Found UUID in WireGuard rawConfig: $uuidToCheck")
-                        } else {
-                            Log.d("MainActivity", "No UUID found in WireGuard rawConfig")
-                        }
-                    }
-                    
-                    // Если UUID не найден в примечании, проверяем имя конфига
-                    if (uuidToCheck.isNullOrBlank() && !name.isNullOrBlank()) {
-                        Log.d("MainActivity", "WireGuard config name: $name, trying to extract UUID or email")
-                        val uuidFromName = findUuidInText(name)
-                        if (uuidFromName != null) {
-                            uuidToCheck = uuidFromName
-                            Log.d("MainActivity", "Found UUID in WireGuard config name: $uuidToCheck")
-                        } else {
-                            // Пытаемся найти email в имени
-                            val emailPattern = Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
-                            val emailMatch = emailPattern.find(name)
-                            if (emailMatch != null) {
-                                val email = emailMatch.value
-                                Log.d("MainActivity", "Found email in WireGuard config name: $email")
-                            }
-                        }
-                    }
-                    
-                    // Также проверяем сохраненное имя конфига из SharedPreferences
-                    if (uuidToCheck.isNullOrBlank()) {
-                        val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-                        val savedWireGuardConfigName = prefs.getString("saved_wireguard_config_name", null)
-                        Log.d("MainActivity", "Checking SharedPreferences for saved WireGuard config name...")
-                        Log.d("MainActivity", "saved_wireguard_config_name: $savedWireGuardConfigName")
-                        
-                        // Проверяем также список сохраненных конфигов
-                        val savedWireGuardConfigsList = prefs.getString("saved_wireguard_configs_list", null)
-                        Log.d("MainActivity", "saved_wireguard_configs_list: ${savedWireGuardConfigsList?.take(500)}")
-                        
-                        if (!savedWireGuardConfigName.isNullOrBlank()) {
-                            Log.d("MainActivity", "Checking saved WireGuard config name: $savedWireGuardConfigName")
-                            val uuidFromSaved = findUuidInText(savedWireGuardConfigName)
-                            if (uuidFromSaved != null) {
-                                uuidToCheck = uuidFromSaved
-                                Log.d("MainActivity", "Found UUID in saved WireGuard config name: $uuidToCheck")
-                            } else {
-                                // Проверяем на email в сохраненном имени
-                                val emailPattern = Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
-                                val emailMatch = emailPattern.find(savedWireGuardConfigName)
-                                if (emailMatch != null) {
-                                    val email = emailMatch.value
-                                    Log.d("MainActivity", "Found email in saved WireGuard config name: $email")
-                                    // TODO: Поиск UUID по email через API
+                        Log.d("MainActivity", "checkSubscriptionFromConfig: Config is standalone (no subscription URL)")
+                        // Это отдельный ключ - очищаем информацию только если она от subscription
+                        val currentInfo = viewModel.subscriptionInfo.value
+                        if (currentInfo != null) {
+                            // Проверяем, есть ли другие subscription URLs
+                            val hasOtherSubscriptions = prefs.all.keys.any { it.startsWith("subscription_url_") }
+                            if (hasOtherSubscriptions) {
+                                Log.d("MainActivity", "checkSubscriptionFromConfig: Clearing subscription info for standalone config")
+                                withContext(Dispatchers.Main) {
+                                    viewModel.clearSubscriptionInfo()
                                 }
                             }
-                        } else {
-                            Log.d("MainActivity", "No saved WireGuard config name found in SharedPreferences")
                         }
-                        
-                        Log.d("MainActivity", "=== End WireGuard Config Analysis ===")
-                        Log.d("MainActivity", "Summary: uuidToCheck=$uuidToCheck, commentToUse=$commentToUse")
                     }
-                }
-                
-                // Логируем результат поиска UUID
-                Log.d("MainActivity", "=== UUID Search Result ===")
-                Log.d("MainActivity", "uuidToCheck: ${uuidToCheck ?: "null"}")
-                Log.d("MainActivity", "parsedConfig.protocol: ${parsedConfig?.protocol}")
-                Log.d("MainActivity", "=== End UUID Search Result ===")
-                
-                if (parsedConfig != null && !uuidToCheck.isNullOrBlank()) {
-                    Log.d("MainActivity", "=== UUID found: $uuidToCheck ===")
-                    Log.w("MainActivity", "API subscription check removed - use Subscription URL instead")
-                    // API проверка подписки удалена - используйте Subscription URL для проверки подписки
                 } else {
-                    Log.d("MainActivity", "=== No UUID found, checking alternative methods ===")
-                    Log.d("MainActivity", "parsedConfig: ${if (parsedConfig != null) "exists" else "null"}")
-                    if (parsedConfig != null) {
-                        Log.d("MainActivity", "parsedConfig.protocol: ${parsedConfig.protocol}")
-                        Log.d("MainActivity", "parsedConfig.comment: ${parsedConfig.comment}")
-                        Log.d("MainActivity", "parsedConfig.name: ${parsedConfig.name}")
-                    }
-                    
-                    // Если UUID не найден, но есть комментарий для WireGuard конфигов,
-                    // пытаемся проверить подписку по комментарию/имени клиента
-                    if (parsedConfig != null && parsedConfig.protocol == com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                        val comment = parsedConfig.comment
-                        Log.d("MainActivity", "=== WireGuard config detected, checking comment ===")
-                        Log.d("MainActivity", "Comment value: $comment")
-                        Log.d("MainActivity", "Comment isNullOrBlank: ${comment.isNullOrBlank()}")
-                        if (!comment.isNullOrBlank()) {
-                            Log.d("MainActivity", "Comment trimmed: ${comment.trim()}")
-                            Log.d("MainActivity", "Comment != '-1': ${comment.trim() != "-1"}")
-                            Log.d("MainActivity", "Comment is numeric: ${comment.trim().matches(Regex("^-?\\d+$"))}")
-                        }
-                        
-                        if (!comment.isNullOrBlank() && comment.trim() != "-1" && !comment.trim().matches(Regex("^-?\\d+$"))) {
-                            Log.d("MainActivity", "=== WireGuard comment found: $comment ===")
-                            Log.w("MainActivity", "API subscription check by comment removed - use Subscription URL instead")
-                        } else {
-                            Log.w("MainActivity", "=== Comment validation failed ===")
-                            Log.w("MainActivity", "Comment isNullOrBlank: ${comment.isNullOrBlank()}")
-                            if (!comment.isNullOrBlank()) {
-                                Log.w("MainActivity", "Comment trimmed: ${comment.trim()}")
-                                Log.w("MainActivity", "Comment == '-1': ${comment.trim() == "-1"}")
-                                Log.w("MainActivity", "Comment is numeric: ${comment.trim().matches(Regex("^-?\\d+$"))}")
-                            }
-                            
-                            // Fallback: попробуем использовать приватный ключ для проверки подписки
-                            val privateKey = parsedConfig.privateKey
-                            if (!privateKey.isNullOrBlank()) {
-                                Log.d("MainActivity", "=== WireGuard private key found ===")
-                                Log.w("MainActivity", "API subscription check by private key removed - use Subscription URL instead")
-                            } else {
-                                Log.w("MainActivity", "WireGuard config: UUID not found in comment, rawConfig, name, or saved config name")
-                                Log.w("MainActivity", "Cannot check subscription without UUID. Config may need UUID in comment or name.")
-                                Log.w("MainActivity", "Searched locations: comment=$comment, name=${parsedConfig.name}")
+                    Log.d("MainActivity", "checkSubscriptionFromConfig: No config key found")
+                    // Конфиг без ключа - это точно отдельный ключ
+                    val currentInfo = viewModel.subscriptionInfo.value
+                    if (currentInfo != null) {
+                        // Проверяем, есть ли subscription URLs
+                        val hasSubscriptions = prefs.all.keys.any { it.startsWith("subscription_url_") }
+                        if (hasSubscriptions) {
+                            Log.d("MainActivity", "checkSubscriptionFromConfig: Clearing subscription info for config without key")
+                            withContext(Dispatchers.Main) {
+                                viewModel.clearSubscriptionInfo()
                             }
                         }
-                    } else {
-                        Log.w("MainActivity", "=== Not a WireGuard config or parsedConfig is null ===")
-                        Log.w("MainActivity", "parsedConfig: ${if (parsedConfig != null) "exists, protocol=${parsedConfig.protocol}" else "null"}")
-                        if (parsedConfig != null && parsedConfig.protocol != com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD) {
-                            Log.w("MainActivity", "This is ${parsedConfig.protocol} config, not WireGuard")
-                        }
-                    Log.w("MainActivity", "Config has no UUID, cannot check subscription")
                     }
-                    Log.d("MainActivity", "=== End alternative methods check ===")
                 }
+                
+                Log.d("MainActivity", "checkSubscriptionFromConfig: Finished processing config")
             } catch (e: Exception) {
-                Log.e("MainActivity", "Failed to check subscription, keeping existing subscription info: ${subscriptionInfo?.format()}", e)
+                Log.e("MainActivity", "checkSubscriptionFromConfig: Error processing config", e)
             }
         }
     }
-    
+
     /**
      * Получение сохраненного конфига
      */
@@ -1364,53 +1388,7 @@ class MainActivity : ComponentActivity() {
     private var shouldShowSubscriptionNotification = false
     
     /**
-     * Сохранение информации о подписке для конкретного конфига
-     */
-    private fun saveSubscriptionInfoForConfig(info: SubscriptionInfo, configKey: String) {
-        val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-            .putInt("subscription_days_$configKey", info.days)
-            .putInt("subscription_hours_$configKey", info.hours)
-            .putBoolean("subscription_unlimited_$configKey", info.unlimited)
-            .putBoolean("subscription_expired_$configKey", info.expired)
-        
-        // Сохраняем новые поля
-        if (info.expiryDate != null) {
-            editor.putLong("subscription_expiry_date_$configKey", info.expiryDate)
-        } else {
-            editor.remove("subscription_expiry_date_$configKey")
-        }
-        
-        if (info.totalTraffic != null) {
-            editor.putLong("subscription_total_traffic_$configKey", info.totalTraffic)
-        } else {
-            editor.remove("subscription_total_traffic_$configKey")
-        }
-        
-        if (info.usedTraffic != null) {
-            editor.putLong("subscription_used_traffic_$configKey", info.usedTraffic)
-        } else {
-            editor.remove("subscription_used_traffic_$configKey")
-        }
-        
-        if (info.remainingTraffic != null) {
-            editor.putLong("subscription_remaining_traffic_$configKey", info.remainingTraffic)
-        } else {
-            editor.remove("subscription_remaining_traffic_$configKey")
-        }
-        
-        if (info.configsCount != null) {
-            editor.putInt("subscription_configs_count_$configKey", info.configsCount)
-        } else {
-            editor.remove("subscription_configs_count_$configKey")
-        }
-        
-        editor.apply()
-        Log.d("MainActivity", "✓ Subscription info saved for config $configKey: ${info.format()}")
-    }
-    
-    /**
-     * Сохранение информации о подписке
+     * Сохранение информации о подписке (упрощенная версия как в VPN сервисе)
      */
     private fun saveSubscriptionInfo(info: SubscriptionInfo, shouldShowNotification: Boolean = false) {
         val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
@@ -1420,7 +1398,7 @@ class MainActivity : ComponentActivity() {
             .putBoolean("subscription_unlimited", info.unlimited)
             .putBoolean("subscription_expired", info.expired)
         
-        // Сохраняем новые поля
+        // Сохраняем дополнительные поля
         if (info.expiryDate != null) {
             editor.putLong("subscription_expiry_date", info.expiryDate)
         } else {
@@ -1445,156 +1423,204 @@ class MainActivity : ComponentActivity() {
             editor.remove("subscription_remaining_traffic")
         }
         
+        if (info.configsCount != null) {
+            editor.putInt("subscription_configs_count", info.configsCount)
+        } else {
+            editor.remove("subscription_configs_count")
+        }
+        
         editor.apply()
-        subscriptionInfo = info
-        subscriptionInfoState.value = info
+        
+        // Обновляем состояние в MainActivity и ViewModel
+        this.subscriptionInfo = info
+        this.subscriptionInfoState.value = info
+        viewModel.updateSubscriptionInfo(info)
+        
         Log.d("MainActivity", "✓ Subscription info saved: ${info.format()}")
         
-        // Показываем уведомление о подписке при сохранении
-        // Проверяем безлимитность: unlimited = true ИЛИ expiryDate = 0L или очень маленькое значение
-        val isUnlimitedSubscription = info.unlimited || 
-                (info.expiryDate != null && (info.expiryDate == 0L || info.expiryDate < 1000000000L))
-        
-        // Формируем текст с информацией о времени подписки
-        val subscriptionText: String = if (isUnlimitedSubscription) {
-            "Безлимит"
-        } else {
-            // Формируем многострочный текст: заголовок по центру, затем дни/часы и трафик
-            val header = "Подписка осталась:"
-            
-            // Проверяем, есть ли данные о подписке
-            when {
-                info.expiryDate != null && info.expiryDate > 0 -> {
-                    val now = System.currentTimeMillis()
-                    val timeUntilExpiry = info.expiryDate - now
-                    if (timeUntilExpiry > 0) {
-                        val days = (timeUntilExpiry / (1000 * 60 * 60 * 24)).toInt()
-                        val hours = ((timeUntilExpiry % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)).toInt()
-                        
-                        // Формируем дни и часы
-                        val details = StringBuilder()
-                        val daysText = when {
-                            days == 1 -> "день"
-                            days in 2..4 -> "дня"
-                            else -> "дней"
-                        }
-                        val hoursText = when {
-                            hours == 1 -> "час"
-                            hours in 2..4 -> "часа"
-                            else -> "часов"
-                        }
-                        
-                        when {
-                            days > 0 && hours > 0 -> details.append("$days $daysText $hours $hoursText")
-                            days > 0 -> details.append("$days $daysText")
-                            hours > 0 -> details.append("$hours $hoursText")
-                            else -> details.append("Активна")
-                        }
-                        
-                        // Добавляем трафик
-                        val trafficText = info.formatTrafficForNotification()
-                        if (trafficText != null) {
-                            details.append(" • $trafficText")
-                        }
-                        
-                        "$header\n${details.toString()}"
-                    } else {
-                        // Подписка истекла
-                        val trafficText = info.formatTrafficForNotification()
-                        if (trafficText != null) {
-                            "$header\nИстекла • $trafficText"
-                        } else {
-                            "$header\nИстекла"
-                        }
-                    }
-                }
-                info.days > 0 || info.hours > 0 -> {
-                    val days = info.days
-                    val hours = info.hours
-                    
-                    // Формируем дни и часы
-                    val details = StringBuilder()
-                    val daysText = when {
-                        days == 1 -> "день"
-                        days in 2..4 -> "дня"
-                        else -> "дней"
-                    }
-                    val hoursText = when {
-                        hours == 1 -> "час"
-                        hours in 2..4 -> "часа"
-                        else -> "часов"
-                    }
-                    
-                    when {
-                        days > 0 && hours > 0 -> details.append("$days $daysText $hours $hoursText")
-                        days > 0 -> details.append("$days $daysText")
-                        hours > 0 -> details.append("$hours $hoursText")
-                        else -> details.append("Активна")
-                    }
-                    
-                    // Добавляем трафик
-                    val trafficText = info.formatTrafficForNotification()
-                    if (trafficText != null) {
-                        details.append(" • $trafficText")
-                    }
-                    
-                    "$header\n${details.toString()}"
-                }
-                else -> {
-                    val trafficText = info.formatTrafficForNotification()
-                    if (trafficText != null) {
-                        "$header\n${info.format()} • $trafficText"
-                    } else {
-                        "$header\n${info.format()}"
-                    }
-                }
-            }
-        }
         // Показываем уведомление только если явно указано или при подключении VPN
         if (shouldShowNotification || shouldShowSubscriptionNotification) {
-            showNotification(subscriptionText, 8000)
+            val subscriptionText = info.format()
+            showNotification(subscriptionText, 800)
             shouldShowSubscriptionNotification = false // Сбрасываем флаг после показа
         }
         
-        // Проверяем и показываем уведомления о приближающемся окончании подписки
-        // НЕ показываем предупреждения для безлимитной подписки (чтобы не перезаписать уведомление "Безлимит")
-        if (!isUnlimitedSubscription) {
-            checkSubscriptionExpiryNotifications(info)
+        // Обновляем уведомление VPN сервиса с новой информацией о подписке
+        try {
+            val serviceIntent = Intent(this, KizVpnService::class.java)
+            bindService(serviceIntent, object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                    // Сервис обновит уведомление автоматически при следующем обновлении
+                }
+                override fun onServiceDisconnected(name: ComponentName?) {}
+            }, Context.BIND_AUTO_CREATE)
+            Log.d("MainActivity", "Updating VPN notification with subscription info: ${info.days} days, ${info.hours} hours")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to update VPN notification", e)
         }
         
-        // Обновляем уведомление VPN сервиса, если VPN подключен
-        if (viewModel.connectionStatus.value.isConnected) {
+        // Проверяем уведомления о приближающемся окончании подписки
+        checkSubscriptionExpiryNotifications(info)
+    }
+    
+    /**
+     * Загрузка информации о подписке (упрощенная версия)
+     */
+    private fun loadSubscriptionInfo(): SubscriptionInfo? {
+        val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+        
+        // Проверяем, есть ли сохраненная информация
+        if (!prefs.contains("subscription_days")) {
+            Log.d("MainActivity", "No saved subscription info found")
+            return null
+        }
+        
+        val days = prefs.getInt("subscription_days", 0)
+        val hours = prefs.getInt("subscription_hours", 0)
+        val unlimited = prefs.getBoolean("subscription_unlimited", false)
+        val expired = prefs.getBoolean("subscription_expired", false)
+        
+        val expiryDate = if (prefs.contains("subscription_expiry_date")) {
+            prefs.getLong("subscription_expiry_date", 0L)
+        } else null
+        
+        val totalTraffic = if (prefs.contains("subscription_total_traffic")) {
+            prefs.getLong("subscription_total_traffic", 0L)
+        } else null
+        
+        val usedTraffic = if (prefs.contains("subscription_used_traffic")) {
+            prefs.getLong("subscription_used_traffic", 0L)
+        } else null
+        
+        val remainingTraffic = if (prefs.contains("subscription_remaining_traffic")) {
+            prefs.getLong("subscription_remaining_traffic", 0L)
+        } else null
+        
+        val configsCount = if (prefs.contains("subscription_configs_count")) {
+            prefs.getInt("subscription_configs_count", 1)
+        } else null
+        
+        val subscriptionInfo = SubscriptionInfo(
+            days = days,
+            hours = hours,
+            unlimited = unlimited,
+            expired = expired,
+            expiryDate = expiryDate,
+            totalTraffic = totalTraffic,
+            usedTraffic = usedTraffic,
+            remainingTraffic = remainingTraffic,
+            configsCount = configsCount
+        )
+        
+        Log.d("MainActivity", "✓ Loaded subscription info: ${subscriptionInfo.format()}")
+        return subscriptionInfo
+    }
+    
+    /**
+     * Обновление подписки активного конфига из subscription_blocks
+     */
+    private fun refreshActiveSubscriptionFromBlocks(activeConfig: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val serviceIntent = Intent(this, KizVpnService::class.java)
-                val binder = bindService(serviceIntent, object : ServiceConnection {
-                    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                        val vpnService = (service as? KizVpnService.KizVpnBinder)?.getService()
-                        
-                        // Вычисляем актуальные дни/часы от текущего времени, если есть дата окончания
-                        var actualDays = info.days
-                        var actualHours = info.hours
-                        
-                        if (info.expiryDate != null) {
-                            val now = System.currentTimeMillis()
-                            val timeUntilExpiry = info.expiryDate - now
+                val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+                val subscriptionsJson = prefs.getString("subscription_blocks", "[]")
+                val subscriptionsArray = org.json.JSONArray(subscriptionsJson)
+                
+                // Ищем подписку с активным конфигом
+                for (i in 0 until subscriptionsArray.length()) {
+                    val subObj = subscriptionsArray.getJSONObject(i)
+                    val configsArray = subObj.optJSONArray("configs") ?: continue
+                    
+                    // Проверяем есть ли активный конфиг в этой подписке
+                    var foundActiveConfig = false
+                    for (j in 0 until configsArray.length()) {
+                        if (configsArray.getString(j) == activeConfig) {
+                            foundActiveConfig = true
+                            break
+                        }
+                    }
+                    
+                    if (foundActiveConfig) {
+                        // Нашли подписку с активным конфигом
+                        val subscriptionUrl = subObj.optString("url", null)
+                        if (!subscriptionUrl.isNullOrBlank()) {
+                            Log.d("MainActivity", "refreshActiveSubscriptionFromBlocks: Found subscription URL: $subscriptionUrl")
                             
-                            if (timeUntilExpiry > 0) {
-                                actualDays = (timeUntilExpiry / (1000 * 60 * 60 * 24)).toInt()
-                                actualHours = ((timeUntilExpiry % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)).toInt()
-                            } else {
-                                actualDays = 0
-                                actualHours = 0
+                            // Обновляем информацию через API
+                            val subscriptionInfo = apiClient.getSubscriptionInfoFromUrl(subscriptionUrl)
+                            val configs = apiClient.getSubscriptionConfigs(subscriptionUrl)
+                            
+                            if (subscriptionInfo != null && configs != null) {
+                                withContext(Dispatchers.Main) {
+                                    // Обновляем данные в subscription_blocks
+                                    subObj.put("name", "Subscription (${configs.size})")
+                                    
+                                    subscriptionInfo.formatUsedTraffic()?.let { 
+                                        subObj.put("usedTraffic", it) 
+                                    }
+                                    subscriptionInfo.formatTotalTraffic()?.let { 
+                                        subObj.put("totalTraffic", it) 
+                                    }
+                                    subscriptionInfo.usedTraffic?.let { 
+                                        subObj.put("usedTrafficBytes", it) 
+                                    }
+                                    subscriptionInfo.totalTraffic?.let { 
+                                        subObj.put("totalTrafficBytes", it) 
+                                    }
+                                    val daysText = subscriptionInfo.format()
+                                    if (daysText != "Не активирован") {
+                                        subObj.put("daysRemaining", daysText)
+                                    }
+                                    
+                                    val configsArrayNew = org.json.JSONArray()
+                                    configs.forEach { configsArrayNew.put(it) }
+                                    subObj.put("configs", configsArrayNew)
+                                    
+                                    // Сохраняем обновлённые данные
+                                    prefs.edit()
+                                        .putString("subscription_blocks", subscriptionsArray.toString())
+                                        .apply()
+                                    
+                                    // Сохраняем в глобальные ключи для уведомления
+                                    val editor = prefs.edit()
+                                    editor.putInt("subscription_days", subscriptionInfo.days)
+                                    editor.putInt("subscription_hours", subscriptionInfo.hours)
+                                    subscriptionInfo.usedTraffic?.let { 
+                                        editor.putLong("subscription_used_traffic", it) 
+                                    }
+                                    subscriptionInfo.totalTraffic?.let { 
+                                        editor.putLong("subscription_total_traffic", it) 
+                                    }
+                                    editor.apply()
+                                    
+                                    // Обновляем уведомление через сервис
+                                    if (viewModel.connectionStatus.value.isConnected) {
+                                        try {
+                                            val serviceIntent = Intent(this@MainActivity, KizVpnService::class.java)
+                                            bindService(serviceIntent, object : ServiceConnection {
+                                                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                                                    val binder = service as? KizVpnService.KizVpnBinder
+                                                    binder?.getService()?.setSubscriptionInfo(subscriptionInfo.days, subscriptionInfo.hours)
+                                                    binder?.refreshSubscriptionInfo()
+                                                    unbindService(this)
+                                                }
+                                                override fun onServiceDisconnected(name: ComponentName?) {}
+                                            }, Context.BIND_AUTO_CREATE)
+                                        } catch (e: Exception) {
+                                            Log.e("MainActivity", "Error updating VPN service notification", e)
+                                        }
+                                    }
+                                    
+                                    Log.d("MainActivity", "✓ Active subscription refreshed: ${subscriptionInfo.format()}")
+                                }
+                                return@launch
                             }
                         }
-                        
-                        vpnService?.setSubscriptionInfo(actualDays, actualHours)
-                        unbindService(this)
                     }
-                    override fun onServiceDisconnected(name: ComponentName?) {}
-                }, Context.BIND_AUTO_CREATE)
-                Log.d("MainActivity", "Updating VPN notification with subscription info: ${info.days} days, ${info.hours} hours")
+                }
+                Log.d("MainActivity", "refreshActiveSubscriptionFromBlocks: Active config not found in subscription_blocks")
             } catch (e: Exception) {
-                Log.e("MainActivity", "Failed to update VPN notification", e)
+                Log.e("MainActivity", "Error refreshing active subscription from blocks", e)
             }
         }
     }
@@ -1666,84 +1692,17 @@ class MainActivity : ComponentActivity() {
     }
     
     /**
-     * Загрузка сохраненной информации о подписке
-     */
-    private fun loadSubscriptionInfo() {
-        val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-        
-        // Проверяем, есть ли сохраненный конфиг - если нет, очищаем информацию о подписке
-        val savedConfig = getSavedConfig()
-        if (savedConfig.isNullOrBlank()) {
-            // Нет сохраненного конфига - очищаем информацию о подписке
-            subscriptionInfo = null
-            subscriptionInfoState.value = null
-            Log.d("MainActivity", "No saved config found, clearing subscription info")
-            // Очищаем сохраненные данные о подписке
-            prefs.edit()
-                .remove("subscription_days")
-                .remove("subscription_hours")
-                .remove("subscription_unlimited")
-                .remove("subscription_expired")
-                .remove("subscription_expiry_date")
-                .remove("subscription_total_traffic")
-                .remove("subscription_used_traffic")
-                .remove("subscription_remaining_traffic")
-                .apply()
-            return
-        }
-        
-        if (prefs.contains("subscription_days") || prefs.contains("subscription_hours")) {
-            val days = prefs.getInt("subscription_days", 0)
-            val hours = prefs.getInt("subscription_hours", 0)
-            val unlimited = prefs.getBoolean("subscription_unlimited", false)
-            val expired = prefs.getBoolean("subscription_expired", false)
-            
-            // Загружаем новые поля
-            val expiryDate = if (prefs.contains("subscription_expiry_date")) {
-                prefs.getLong("subscription_expiry_date", -1).takeIf { it > 0 }
-            } else null
-            
-            val totalTraffic = if (prefs.contains("subscription_total_traffic")) {
-                prefs.getLong("subscription_total_traffic", -1).takeIf { it >= 0 }
-            } else null
-            
-            val usedTraffic = if (prefs.contains("subscription_used_traffic")) {
-                prefs.getLong("subscription_used_traffic", -1).takeIf { it >= 0 }
-            } else null
-            
-            val remainingTraffic = if (prefs.contains("subscription_remaining_traffic")) {
-                prefs.getLong("subscription_remaining_traffic", -1).takeIf { it >= 0 }
-            } else null
-            
-            subscriptionInfo = SubscriptionInfo(
-                days = days,
-                hours = hours,
-                unlimited = unlimited,
-                expired = expired,
-                expiryDate = expiryDate,
-                totalTraffic = totalTraffic,
-                usedTraffic = usedTraffic,
-                remainingTraffic = remainingTraffic
-            )
-            subscriptionInfoState.value = subscriptionInfo
-            Log.d("MainActivity", "Loaded subscription info: ${subscriptionInfo?.format()}")
-        } else {
-            subscriptionInfo = null
-            subscriptionInfoState.value = null
-            Log.d("MainActivity", "No subscription info found in preferences")
-        }
-    }
-    
-    /**
      * Проверка подписки из Subscription URL
      */
-    private fun checkSubscriptionFromUrl(subscriptionUrl: String) {
+    private fun checkSubscriptionFromUrl(subscriptionUrl: String, forceUpdate: Boolean = false) {
         Log.d("MainActivity", "=== Checking subscription from URL ===")
         Log.d("MainActivity", "URL: $subscriptionUrl")
+        Log.d("MainActivity", "Force update: $forceUpdate")
         
         // Если VPN был вручную отключен, не проверяем подписку (чтобы избежать автоподключения)
-        if (wasManuallyDisconnected) {
-            Logger.debug(Logger.Tag.MAIN, "checkSubscriptionFromUrl: VPN был вручную отключен, пропускаем проверку")
+        // Исключение: если это принудительное обновление при смене конфига
+        if (wasManuallyDisconnected && !forceUpdate) {
+            Logger.debug(Logger.Tag.MAIN, "checkSubscriptionFromUrl: VPN был вручную отключен, пропускаем проверку (forceUpdate=$forceUpdate)")
             return
         }
         
@@ -1912,7 +1871,7 @@ class MainActivity : ComponentActivity() {
                                                 val parsed = configParser.parseConfig(config)
                                                 if (parsed != null) {
                                                     val configKey = parsed.uuid ?: parsed.name ?: "default"
-                                                    saveSubscriptionInfoForConfig(updatedInfo, configKey)
+                                                    saveSubscriptionInfo(updatedInfo)
                                                 }
                                             }
                                             
@@ -2027,7 +1986,23 @@ class MainActivity : ComponentActivity() {
                         if (now - lastSubscriptionCheckTime >= 50 * 60 * 1000L) {
                             Log.d("MainActivity", "Периодическое обновление подписки (раз в час)")
                             lastSubscriptionCheckTime = now
-                            checkSubscriptionFromConfig(savedConfig)
+                            
+                            // Обновляем только subscription URL конфиги, не очищаем информацию для отдельных ключей
+                            val parsedConfig = configParser.parseConfig(savedConfig)
+                            val configKey = parsedConfig?.uuid ?: parsedConfig?.name ?: parsedConfig?.comment
+                            
+                            if (configKey != null) {
+                                val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+                                val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
+                                if (!savedSubscriptionUrl.isNullOrBlank()) {
+                                    Log.d("MainActivity", "Периодическое обновление: обновляем subscription URL")
+                                    checkSubscriptionFromUrl(savedSubscriptionUrl)
+                                } else {
+                                    Log.d("MainActivity", "Периодическое обновление: пропуск для отдельного ключа")
+                                }
+                            } else {
+                                Log.d("MainActivity", "Периодическое обновление: пропуск для конфига без ключа")
+                            }
                         } else {
                             Log.d("MainActivity", "Пропуск периодического обновления: недавно проверяли подписку")
                         }
@@ -2133,81 +2108,34 @@ class MainActivity : ComponentActivity() {
                 // Сбрасываем флаг ручного отключения при попытке подключения
                 wasManuallyDisconnected = false
                 
-                // onConnectClick используется ТОЛЬКО для подключения
-                // HomeScreen уже проверяет isConnected и вызывает правильный callback
-                // (onDisconnectClick если подключен, onConnectClick если отключен)
-                
-                // Защита от множественных быстрых нажатий - проверяем актуальное состояние
+                // Защита от множественных быстрых нажатий
                 val currentStatus = viewModel.connectionStatus.value
                 if (currentStatus.isConnected || currentStatus.isConnecting || isVpnOperationInProgress.get()) {
                     Log.d("MainActivity", "onConnectClick: VPN already connected/connecting or operation in progress, ignoring")
                     return@AppNavHost
                 }
                 
-                // ВСЕГДА используем getSavedConfig(), который правильно учитывает active_config_type
-                    // Это гарантирует, что используется правильный конфиг (Vless или WireGuard)
-                    val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-                    val activeConfigType = prefs.getString("active_config_type", null)
-                    Log.d("MainActivity", "onConnectClick: active_config_type = $activeConfigType")
+                // Проверяем, есть ли активный конфиг
+                val config = getSavedConfig()
+                Log.d("MainActivity", "onConnectClick: Checking active config...")
+                
+                if (!config.isNullOrBlank()) {
+                    Log.d("MainActivity", "onConnectClick: Active config found, connecting...")
                     
-                    val config = getSavedConfig()
+                    // Устанавливаем флаг для показа уведомления при подключении
+                    shouldShowSubscriptionNotification = true
                     
-                    Log.d("MainActivity", "onConnectClick: Checking if config exists...")
-                    if (!config.isNullOrBlank()) {
-                        Log.d("MainActivity", "onConnectClick: Config found, length=${config.length}")
-                        // Проверяем тип конфига
-                        val parsedConfig = configParser.parseConfig(config)
-                        val actualConfigType = when (parsedConfig?.protocol) {
-                            com.kizvpn.client.config.ConfigParser.Protocol.VLESS -> "vless"
-                            com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD -> "wireguard"
-                            else -> "unknown"
-                        }
-                        Log.d("MainActivity", "onConnectClick: Connecting with config type = $activeConfigType, actual protocol = $actualConfigType, config = ${config.take(100)}...")
-                        
-                        // Если activeConfigType не совпадает с actualConfigType, это проблема!
-                        if (actualConfigType != "unknown" && activeConfigType != actualConfigType) {
-                            Log.e("MainActivity", "🚨 КРИТИЧЕСКАЯ ОШИБКА в onConnectClick: activeConfigType = $activeConfigType, но actualConfigType = $actualConfigType")
-                            Log.e("MainActivity", "🚨 Исправляем activeConfigType на $actualConfigType")
-                            // Исправляем activeConfigType
-                            prefs.edit().putString("active_config_type", actualConfigType).commit()
-                            
-                            // Также сохраняем конфиг в правильное место
-                            // ВАЖНО: НЕ удаляем конфиги другого типа - они должны сохраняться независимо
-                            when (parsedConfig?.protocol) {
-                                com.kizvpn.client.config.ConfigParser.Protocol.VLESS -> {
-                                    prefs.edit()
-                                        .putString("saved_config", config)
-                                        .commit()
-                                    Log.d("MainActivity", "onConnectClick: Сохранен Vless конфиг в saved_config")
-                                }
-                                com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD -> {
-                                    prefs.edit()
-                                        .putString("saved_wireguard_config", config)
-                                        .commit()
-                                    Log.d("MainActivity", "onConnectClick: Сохранен WireGuard конфиг в saved_wireguard_config")
-                                }
-                                else -> {}
-                            }
-                        }
-                        
-                        // Обновляем currentConfigInput и ViewModel
-                        currentConfigInput = config
-                        viewModel.setVpnConfig(config)
-                        
-                        // Устанавливаем флаг для показа уведомления при подключении
-                        shouldShowSubscriptionNotification = true
-                        // НЕ проверяем подписку перед подключением - это может вызвать автоподключение
-                        // Подписка проверяется автоматически после подключения (если нужно)
-                        connectToVpn(config)
-                    } else {
-                        Log.w("MainActivity", "onConnectClick: No config found! active_config_type = $activeConfigType")
-                        // Показываем уведомление вверху экрана
-                        configNotificationState.value = "Вставьте конфиг"
-                        lifecycleScope.launch {
-                            delay(3000)
-                            configNotificationState.value = null
-                        }
+                    // Подключаемся (startVpnConnection сам получит текущий активный конфиг)
+                    connectToVpn(config)
+                } else {
+                    Log.w("MainActivity", "onConnectClick: No active config found!")
+                    // Показываем уведомление
+                    configNotificationState.value = "Вставьте конфиг"
+                    lifecycleScope.launch {
+                        delay(3000)
+                        configNotificationState.value = null
                     }
+                }
             },
             onDisconnectClick = {
                 // Проверяем актуальное состояние - если VPN уже отключен, ничего не делаем
@@ -2305,6 +2233,11 @@ class MainActivity : ComponentActivity() {
                     .putString("active_config_type", "wireguard") // Устанавливаем WireGuard как активный
                     .commit() // Используем commit() для синхронного сохранения
                 Log.d("MainActivity", "onSaveWireGuardConfig: Saved WireGuard config, set active_config_type = wireguard")
+                
+                // Очищаем информацию о подписке для отдельных конфигов
+                Log.d("MainActivity", "onSaveWireGuardConfig: Очищаем подписку для standalone WireGuard конфига")
+                clearAllSubscriptionInfo()
+                
                 currentConfigInput = config
                 viewModel.setVpnConfig(config)
             },
@@ -2373,6 +2306,21 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         Log.d("MainActivity", "onDeleteConfig: Конфиг удален, осталось: ${configList.length()}")
+                        
+                        // Проверяем, остались ли еще конфиги
+                        val vlessListJson = prefs.getString("saved_vless_configs_list", "[]")
+                        val wireGuardListJson = prefs.getString("saved_wireguard_configs_list", "[]")
+                        val vlessConfigs = org.json.JSONArray(vlessListJson)
+                        val wireGuardConfigs = org.json.JSONArray(wireGuardListJson)
+                        val totalConfigs = vlessConfigs.length() + wireGuardConfigs.length()
+                        
+                        Log.d("MainActivity", "onDeleteConfig: Всего конфигов осталось: $totalConfigs")
+                        
+                        // Если конфигов не осталось, очищаем информацию о подписке
+                        if (totalConfigs == 0) {
+                            Log.d("MainActivity", "onDeleteConfig: Все конфиги удалены, очищаем подписку")
+                            clearAllSubscriptionInfo()
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Ошибка при удалении конфига", e)
@@ -2382,28 +2330,25 @@ class MainActivity : ComponentActivity() {
                 // При выборе конфига из списка, устанавливаем его как текущий
                 Log.d("MainActivity", "onSelectConfig: protocol = $protocol, config = ${config.take(100)}...")
                 
-                // Парсим конфиг еще раз для проверки
+                // Проверяем, подключен ли VPN
+                val wasConnected = connectionStatus.isConnected
+                Log.d("MainActivity", "onSelectConfig: VPN was connected = $wasConnected")
+                
+                // Парсим конфиг
                 val parsedConfig = configParser.parseConfig(config)
                 val actualProtocol = parsedConfig?.protocol
                 Log.d("MainActivity", "onSelectConfig: parsedProtocol = $actualProtocol")
                 
-                // Если протокол не совпадает, это критическая ошибка!
-                if (actualProtocol != null && actualProtocol != protocol) {
-                    Log.e("MainActivity", "🚨 КРИТИЧЕСКАЯ ОШИБКА в onSelectConfig: передан protocol = $protocol, но parsedProtocol = $actualProtocol")
-                    Log.e("MainActivity", "🚨 Используем actualProtocol = $actualProtocol (из парсера)")
-                }
-                
-                // Используем протокол из парсера, если он доступен, иначе используем переданный
+                // Используем протокол из парсера, если он доступен
                 val protocolToUse = actualProtocol ?: protocol
                 Log.d("MainActivity", "onSelectConfig: protocolToUse = $protocolToUse")
                 
-                // Если конфиг успешно распарсен, сохраняем его в список конфигов через saveConfig
-                // Это добавит конфиг в saved_vless_configs_list или saved_wireguard_configs_list
+                // ВАЖНО: Сохраняем конфиг как активный ПЕРЕД любыми другими операциями
                 if (parsedConfig != null) {
                     saveConfig(config)
-                    Log.d("MainActivity", "onSelectConfig: Конфиг сохранен через saveConfig в список конфигов")
+                    Log.d("MainActivity", "onSelectConfig: ✓ Конфиг сохранен через saveConfig")
                 } else {
-                    // Если парсинг не удался, просто сохраняем как активный (для обратной совместимости)
+                    // Fallback: сохраняем напрямую
                     val prefsFallback = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
                     val configType = when (protocolToUse) {
                         com.kizvpn.client.config.ConfigParser.Protocol.VLESS -> "vless"
@@ -2417,14 +2362,14 @@ class MainActivity : ComponentActivity() {
                                 .putString("saved_config", config)
                                 .putString("active_config_type", configType)
                                 .commit()
-                            Log.d("MainActivity", "onSelectConfig: Сохранен Vless конфиг в saved_config (парсинг не удался)")
+                            Log.d("MainActivity", "onSelectConfig: ✓ Vless конфиг сохранен в saved_config")
                         }
                         com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD -> {
                             prefsFallback.edit()
                                 .putString("saved_wireguard_config", config)
                                 .putString("active_config_type", configType)
                                 .commit()
-                            Log.d("MainActivity", "onSelectConfig: Сохранен WireGuard конфиг в saved_wireguard_config (парсинг не удался)")
+                            Log.d("MainActivity", "onSelectConfig: ✓ WireGuard конфиг сохранен в saved_wireguard_config")
                         }
                         else -> {
                             prefsFallback.edit().putString("active_config_type", configType).commit()
@@ -2432,35 +2377,56 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Устанавливаем конфиг как текущий
+                // Устанавливаем конфиг в ViewModel
                 currentConfigInput = config
                 viewModel.setVpnConfig(config)
+                Log.d("MainActivity", "onSelectConfig: ✓ Конфиг установлен в ViewModel")
                 
-                // Проверяем подписку при изменении конфига
-                if (config.isNotBlank()) {
-                    val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
-                    // Пытаемся найти сохраненный Subscription URL для этого конфига
-                    val parsedConfigForSubscription = configParser.parseConfig(config)
-                    val configKey = parsedConfigForSubscription?.uuid ?: parsedConfigForSubscription?.name
-                    
-                    var savedSubscriptionUrl: String? = null
-                    if (configKey != null) {
-                        savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
-                        Log.d("MainActivity", "onSelectConfig: Looking for subscription URL for config key: $configKey")
-                    }
+                // Загружаем информацию о подписке для выбранного конфига (только обновляем, не очищаем)
+                val prefs = getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+                val configKey = parsedConfig?.uuid ?: parsedConfig?.name
+                
+                if (configKey != null) {
+                    val savedSubscriptionUrl = prefs.getString("subscription_url_$configKey", null)
                     
                     if (!savedSubscriptionUrl.isNullOrBlank()) {
-                        // Если есть сохраненный Subscription URL - проверяем его
-                        Log.d("MainActivity", "onSelectConfig: Found saved subscription URL for config, checking...")
-                        checkSubscriptionFromUrl(savedSubscriptionUrl)
+                        // Это конфиг из subscription URL - загружаем сохраненную информацию
+                        Log.d("MainActivity", "onSelectConfig: Конфиг из subscription URL, загружаем информацию...")
+                        val savedSubscriptionInfo = loadSubscriptionInfo()
+                        if (savedSubscriptionInfo != null) {
+                            Log.d("MainActivity", "onSelectConfig: ✓ Загружена информация о подписке")
+                            this@MainActivity.subscriptionInfo = savedSubscriptionInfo
+                            this@MainActivity.subscriptionInfoState.value = savedSubscriptionInfo
+                            viewModel.updateSubscriptionInfo(savedSubscriptionInfo)
+                        } else {
+                            Log.d("MainActivity", "onSelectConfig: Нет сохраненной информации о подписке для этого конфига")
+                            // НЕ очищаем существующую информацию - сохраняем принцип постоянства
+                        }
                     } else {
-                        // Если нет Subscription URL - проверяем конфиг напрямую (старый способ)
-                        Log.d("MainActivity", "onSelectConfig: No saved subscription URL found for config key: $configKey")
-                        Log.d("MainActivity", "onSelectConfig: Checking config directly (old method)...")
-                        checkSubscriptionFromConfig(config)
+                        // Это standalone конфиг - очищаем информацию о подписке
+                        Log.d("MainActivity", "onSelectConfig: Standalone конфиг, очищаем информацию о подписке")
+                        clearAllSubscriptionInfo()
                     }
+                } else {
+                    Log.d("MainActivity", "onSelectConfig: Нет config key, очищаем информацию о подписке")
+                    clearAllSubscriptionInfo()
+                }
+                
+                // Если VPN был подключен - отключаем его
+                // Пользователь должен вручную включить VPN для подключения к новому конфигу
+                if (wasConnected) {
+                    Log.d("MainActivity", "onSelectConfig: VPN был подключен, отключаем...")
+                    disconnectFromVpn()
+                } else {
+                    Log.d("MainActivity", "onSelectConfig: VPN не был подключен, конфиг готов к использованию")
                 }
             },
+            onShowNetworkChart = { },
+            isVpnConnected = connectionStatus.isConnected,
+            onUpdateSubscriptionInfo = { newSubscriptionInfo ->
+                subscriptionInfoState.value = newSubscriptionInfo
+                this.subscriptionInfo = newSubscriptionInfo
+            }
         )
     }
     

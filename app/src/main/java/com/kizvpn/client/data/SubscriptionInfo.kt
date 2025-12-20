@@ -150,11 +150,22 @@ data class SubscriptionInfo(
         val locale = Locale.getDefault()
         
         val (formatString, value) = when {
-            tb >= 1.0 -> "%.2f TB" to tb
-            gb >= 1.0 -> "%.1f GB" to gb  // Один знак после запятой для GB (как на скриншоте: 0,0 GB)
-            mb >= 1.0 -> "%.2f MB" to mb
-            kb >= 1.0 -> "%.2f KB" to kb
-            else -> return "$bytes B"
+            tb >= 1.0 -> "%.1fTB" to tb
+            gb >= 0.1 -> {
+                // Для GB: если целое число, не показываем десятичные
+                if (gb == gb.toInt().toDouble()) {
+                    "%.0fGB" to gb
+                } else {
+                    "%.1fGB" to gb
+                }
+            }
+            mb >= 100.0 -> {
+                // Если MB >= 100, показываем в GB с одним знаком
+                "%.1fGB" to gb
+            }
+            mb >= 1.0 -> "%.0fMB" to mb   // Целые MB
+            kb >= 1.0 -> "%.0fKB" to kb   // Целые KB
+            else -> return "${bytes}B"
         }
         
         val formatted = String.format(locale, formatString, value)
@@ -164,6 +175,79 @@ data class SubscriptionInfo(
             formatted.replace(".", ",")
         } else {
             formatted
+        }
+    }
+    
+    /**
+     * Форматирует трафик в компактном виде (например, 822,55 MB -> 0,8GB)
+     */
+    private fun formatBytesCompact(bytes: Long): String {
+        val kb = bytes / 1024.0
+        val mb = kb / 1024.0
+        val gb = mb / 1024.0
+        val tb = gb / 1024.0
+        
+        val locale = Locale.getDefault()
+        
+        val (formatString, value) = when {
+            tb >= 1.0 -> "%.1fTB" to tb
+            gb >= 0.1 -> {
+                // Для GB: если целое число, не показываем десятичные
+                if (gb == gb.toInt().toDouble()) {
+                    "%.0fGB" to gb
+                } else {
+                    "%.1fGB" to gb
+                }
+            }
+            mb >= 100.0 -> {
+                // Если MB >= 100, показываем в GB с одним знаком
+                "%.1fGB" to gb
+            }
+            mb >= 1.0 -> "%.0fMB" to mb   // Целые MB
+            kb >= 1.0 -> "%.0fKB" to kb   // Целые KB
+            else -> return "${bytes}B"
+        }
+        
+        val formatted = String.format(locale, formatString, value)
+        
+        return if (locale.language == "ru" && formatted.contains(".")) {
+            formatted.replace(".", ",")
+        } else {
+            formatted
+        }
+    }
+    
+    /**
+     * Форматирует использованный трафик в компактном виде
+     */
+    fun formatUsedTrafficCompact(): String? {
+        if (usedTraffic == null) return null
+        return formatBytesCompact(usedTraffic)
+    }
+    
+    /**
+     * Форматирует общий трафик в компактном виде
+     */
+    fun formatTotalTrafficCompact(): String? {
+        if (totalTraffic == null) return null
+        return formatBytesCompact(totalTraffic)
+    }
+    
+    /**
+     * Форматирует время в компактном виде (например, 33 дней 23 часов -> 33д 23ч)
+     */
+    fun formatTimeCompact(): String {
+        if (expired) return "Истекла"
+        if (unlimited) return "Безлимит"
+        
+        val totalDays = days ?: 0
+        val totalHours = hours ?: 0
+        
+        return when {
+            totalDays > 0 && totalHours > 0 -> "${totalDays}д ${totalHours}ч"
+            totalDays > 0 -> "${totalDays}д"
+            totalHours > 0 -> "${totalHours}ч"
+            else -> "Истекла"
         }
     }
     
@@ -208,17 +292,31 @@ data class SubscriptionInfo(
     }
     
     /**
-     * Форматирует трафик в формате "45.79 MB / 50 GB" (использовано / всего)
+     * Форматирует трафик в формате "0,8GB / 100GB" (использовано / всего)
      * Используется для уведомлений
      */
     fun formatTrafficForNotification(): String? {
-        val usedText = formatUsedTraffic() ?: return null
-        val totalText = if (totalTraffic != null && totalTraffic > 0) {
-            formatTotalTraffic() ?: "∞"
+        val usedText = formatUsedTrafficCompact() ?: return null
+        val totalText: String
+        val isUnlimitedTraffic: Boolean
+        
+        // Проверяем безлимитность ТОЛЬКО по трафику: если totalTraffic == null, <= 0 или очень большое число (больше 500 GB)
+        if (totalTraffic == null || totalTraffic <= 0 || totalTraffic > 500L * 1024 * 1024 * 1024) {
+            totalText = "∞"
+            isUnlimitedTraffic = true
         } else {
-            "∞"
+            totalText = formatTotalTrafficCompact() ?: "∞"
+            isUnlimitedTraffic = false
         }
-        return "$usedText / $totalText"
+        
+        // "Безлимит" показываем ТОЛЬКО если трафик действительно безлимитный И нет ограничения по времени
+        val hasTimeLimitation = (days != null && days > 0)
+        
+        return if (isUnlimitedTraffic && !hasTimeLimitation) {
+            "Безлимит • $usedText / $totalText"
+        } else {
+            "$usedText / $totalText"
+        }
     }
     
     /**

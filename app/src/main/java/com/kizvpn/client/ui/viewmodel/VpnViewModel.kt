@@ -63,6 +63,10 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     // Время начала подключения
     private var connectionStartTime: Long? = null
     
+    // Информация о подписке
+    private val _subscriptionInfo = MutableStateFlow<com.kizvpn.client.data.SubscriptionInfo?>(null)
+    val subscriptionInfo: StateFlow<com.kizvpn.client.data.SubscriptionInfo?> = _subscriptionInfo.asStateFlow()
+    
     init {
         // Загружаем сохраненный конфиг
         loadSavedConfig()
@@ -377,6 +381,14 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     
     fun updateLatency(latency: Int) {
         _connectionStatus.value = _connectionStatus.value.copy(latency = latency)
+    }
+    
+    fun updateSubscriptionInfo(subscriptionInfo: com.kizvpn.client.data.SubscriptionInfo?) {
+        _subscriptionInfo.value = subscriptionInfo
+    }
+    
+    fun clearSubscriptionInfo() {
+        _subscriptionInfo.value = null
     }
 }
 

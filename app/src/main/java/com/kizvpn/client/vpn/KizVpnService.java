@@ -20,13 +20,7 @@ import android.system.Os;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
-
-import android.graphics.BitmapFactory;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
+import android.widget.RemoteViews;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -93,8 +87,13 @@ public class KizVpnService extends VpnService implements SocketProtect {
     private long subscriptionUsedTraffic = -1;
     private long subscriptionTotalTraffic = -1;
     
+    // Информация о пинге и скорости для уведомления
+    private int currentPing = -1; // -1 означает нет данных
+    private long currentDownloadSpeed = 0; // в байтах/сек
+    private long currentUploadSpeed = 0; // в байтах/сек
+    
     private static final String CHANNEL_ID = "kiz_vpn_service";
-    private static final int NOTIFICATION_ID = 2; // Изменено для принудительного создания нового уведомления
+    private static final int NOTIFICATION_ID = 3; // Изменено для принудительного создания нового уведомления без largeIcon
     
     /**
      * Установить конфиг для VPN
@@ -117,6 +116,35 @@ public class KizVpnService extends VpnService implements SocketProtect {
         synchronized (vpnStateLock) {
             this.subscriptionDays = days;
             this.subscriptionHours = hours;
+            // Обновляем уведомление, если VPN подключен
+            if (vpnState == VPNState.CONNECTED) {
+                updateNotification();
+            }
+        }
+    }
+    
+    /**
+     * Установить информацию о пинге для отображения в уведомлении
+     */
+    public void setPingInfo(int ping) {
+        synchronized (vpnStateLock) {
+            Log.d(TAG, "setPingInfo: " + ping + "ms");
+            this.currentPing = ping;
+            // Обновляем уведомление, если VPN подключен
+            if (vpnState == VPNState.CONNECTED) {
+                updateNotification();
+            }
+        }
+    }
+    
+    /**
+     * Установить информацию о скорости для отображения в уведомлении
+     */
+    public void setSpeedInfo(long downloadSpeed, long uploadSpeed) {
+        synchronized (vpnStateLock) {
+            Log.d(TAG, "setSpeedInfo: download=" + downloadSpeed + "B/s, upload=" + uploadSpeed + "B/s");
+            this.currentDownloadSpeed = downloadSpeed;
+            this.currentUploadSpeed = uploadSpeed;
             // Обновляем уведомление, если VPN подключен
             if (vpnState == VPNState.CONNECTED) {
                 updateNotification();
@@ -382,65 +410,32 @@ public class KizVpnService extends VpnService implements SocketProtect {
         
         // Используем монохромную версию логотипа для smallIcon
         int iconResId = R.drawable.kiz_vpn_mono;
-        
-        // Создаем bitmap без фона для largeIcon (прозрачный фон)
-        Bitmap monoBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.kiz_vpn_mono);
-        Bitmap transparentBitmap = null;
-        if (monoBitmap != null) {
-            // Создаем новый bitmap с прозрачным фоном
-            transparentBitmap = Bitmap.createBitmap(monoBitmap.getWidth(), monoBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-            
-            // Удаляем фон (делаем черный/темный фон прозрачным)
-            int[] pixels = new int[monoBitmap.getWidth() * monoBitmap.getHeight()];
-            monoBitmap.getPixels(pixels, 0, monoBitmap.getWidth(), 0, 0, monoBitmap.getWidth(), monoBitmap.getHeight());
-            
-            for (int i = 0; i < pixels.length; i++) {
-                int pixel = pixels[i];
-                int alpha = (pixel >> 24) & 0xFF;
-                int red = (pixel >> 16) & 0xFF;
-                int green = (pixel >> 8) & 0xFF;
-                int blue = pixel & 0xFF;
-                
-                // Если пиксель очень темный (почти черный), делаем его прозрачным
-                if (red < 30 && green < 30 && blue < 30) {
-                    pixels[i] = 0x00000000; // Прозрачный
-                }
-            }
-            
-            transparentBitmap.setPixels(pixels, 0, monoBitmap.getWidth(), 0, 0, monoBitmap.getWidth(), monoBitmap.getHeight());
-            Log.i(TAG, "Mono logo bitmap processed, background removed");
-        }
-        
         Log.i(TAG, "Using mono logo icon resource ID: " + iconResId);
         
         // Проверяем настройку уведомлений
         android.content.SharedPreferences prefs = getSharedPreferences("vpn_settings", MODE_PRIVATE);
         boolean notificationsEnabled = prefs.getBoolean("notifications_enabled", true);
         
-        // Формируем текст с информацией о подписке
-        String contentText = "VPN подключен";
+        // Формируем компактный текст для уведомления (в одну строку) - объединяем время, трафик, пинг и скорость
         StringBuilder textBuilder = new StringBuilder();
         
         // Добавляем информацию о времени подписки
         if (notificationsEnabled && (subscriptionDays > 0 || subscriptionHours > 0)) {
-            textBuilder.append("Осталось: • ");
-            
             if (subscriptionDays > 0) {
                 int months = subscriptionDays / 30;
                 int remainingDays = subscriptionDays % 30;
                 if (months > 0 && remainingDays > 0) {
-                    textBuilder.append(String.format("%d мес. %d дн.", months, remainingDays));
+                    textBuilder.append(String.format("%dм %dд", months, remainingDays));
                 } else if (months > 0) {
-                    textBuilder.append(String.format("%d мес.", months));
+                    textBuilder.append(String.format("%d мес", months));
                 } else {
-                    textBuilder.append(String.format("%d дн.", subscriptionDays));
-                    // Добавляем часы, если они есть
+                    textBuilder.append(String.format("%dд", subscriptionDays));
                     if (subscriptionHours > 0) {
-                        textBuilder.append(String.format(" %d ч.", subscriptionHours));
+                        textBuilder.append(String.format(" %dч", subscriptionHours));
                     }
                 }
             } else {
-                textBuilder.append(String.format("%d ч.", subscriptionHours));
+                textBuilder.append(String.format("%d ч", subscriptionHours));
             }
         }
         
@@ -453,27 +448,71 @@ public class KizVpnService extends VpnService implements SocketProtect {
             textBuilder.append(trafficText);
         }
         
+        // Добавляем пинг (при старте пока нет данных)
+        if (currentPing > 0) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(currentPing).append("ms");
+        }
+        
+        // Добавляем скорость (при старте пока нет данных)
+        String speedText = formatSpeedForNotification();
+        if (speedText != null) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(speedText);
+        }
+        
+        // Формируем заголовок и текст
+        String contentTitle = "KIZ VPN";
+        String contentText;
         if (textBuilder.length() > 0) {
             contentText = textBuilder.toString();
+        } else {
+            contentText = "Подключено";
         }
         
         // Выбираем приоритет и видимость в зависимости от настроек
         int priority = notificationsEnabled ? NotificationCompat.PRIORITY_LOW : NotificationCompat.PRIORITY_MIN;
         int visibility = notificationsEnabled ? NotificationCompat.VISIBILITY_PUBLIC : NotificationCompat.VISIBILITY_SECRET;
         
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("KIZ VPN")
-            .setContentText(contentText)
-            .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle()
-                .bigText(contentText))
+        // Вычисляем прогресс трафика для полоски в уведомлении
+        int trafficProgressPercent = 0;
+        // Показываем прогресс только для ограниченных подписок (не больше 500 GB)
+        if (subscriptionUsedTraffic >= 0 && subscriptionTotalTraffic > 0 && subscriptionTotalTraffic <= 500L * 1024 * 1024 * 1024) {
+            trafficProgressPercent = (int) ((subscriptionUsedTraffic * 100) / subscriptionTotalTraffic);
+            if (trafficProgressPercent > 100) trafficProgressPercent = 100;
+        }
+        
+        // Создаём кастомный layout для уведомления
+        RemoteViews customView = new RemoteViews(getPackageName(), R.layout.notification_custom);
+        customView.setTextViewText(R.id.notification_text, contentText);
+        
+        // Формируем дополнительную информацию (пинг и скорость) - при старте пока нет данных
+        customView.setViewVisibility(R.id.notification_extra_info, android.view.View.GONE);
+        
+        // Настраиваем полосу прогресса (только для ограниченных подписок)
+        if (subscriptionUsedTraffic >= 0 && subscriptionTotalTraffic > 0 && subscriptionTotalTraffic <= 500L * 1024 * 1024 * 1024) {
+            customView.setProgressBar(R.id.notification_progress, 100, trafficProgressPercent, false);
+            customView.setViewVisibility(R.id.notification_progress, android.view.View.VISIBLE);
+        } else {
+            customView.setViewVisibility(R.id.notification_progress, android.view.View.GONE);
+        }
+        
+        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(iconResId) // Монохромная иконка для строки состояния
-            .setLargeIcon(transparentBitmap != null ? transparentBitmap : BitmapFactory.decodeResource(getResources(), R.drawable.kiz_vpn2)) // Монохромный логотип без фона в уведомлении
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(priority) // Зависит от настроек
             .setVisibility(visibility) // Зависит от настроек
+            .setShowWhen(false) // Убираем время
             .setAutoCancel(false)
-            .build();
+            .setCustomContentView(customView) // Кастомный layout для свёрнутого уведомления
+            .setStyle(new androidx.core.app.NotificationCompat.DecoratedCustomViewStyle()); // Стиль для кастомного уведомления
+        
+        Notification notification = notificationBuilder.build();
         
         Log.i(TAG, "Notification built, starting foreground service...");
         
@@ -818,31 +857,26 @@ public class KizVpnService extends VpnService implements SocketProtect {
             return;
         }
         
-        // Если уведомления включены, показываем полную информацию
-        // Формируем текст с информацией о подписке
-        String contentText = "VPN подключен";
+        // Формируем компактный текст (в одну строку) - объединяем время, трафик, пинг и скорость
         StringBuilder textBuilder = new StringBuilder();
         
         // Добавляем информацию о времени подписки
         if (subscriptionDays > 0 || subscriptionHours > 0) {
-            textBuilder.append("Осталось: • ");
-            
             if (subscriptionDays > 0) {
                 int months = subscriptionDays / 30;
                 int remainingDays = subscriptionDays % 30;
                 if (months > 0 && remainingDays > 0) {
-                    textBuilder.append(String.format("%d мес. %d дн.", months, remainingDays));
+                    textBuilder.append(String.format("%dм %dд", months, remainingDays));
                 } else if (months > 0) {
-                    textBuilder.append(String.format("%d мес.", months));
+                    textBuilder.append(String.format("%d мес", months));
                 } else {
-                    textBuilder.append(String.format("%d дн.", subscriptionDays));
-                    // Добавляем часы, если они есть
+                    textBuilder.append(String.format("%dд", subscriptionDays));
                     if (subscriptionHours > 0) {
-                        textBuilder.append(String.format(" %d ч.", subscriptionHours));
+                        textBuilder.append(String.format(" %dч", subscriptionHours));
                     }
                 }
             } else {
-                textBuilder.append(String.format("%d ч.", subscriptionHours));
+                textBuilder.append(String.format("%d ч", subscriptionHours));
             }
         }
         
@@ -855,8 +889,29 @@ public class KizVpnService extends VpnService implements SocketProtect {
             textBuilder.append(trafficText);
         }
         
+        // Добавляем пинг
+        if (currentPing > 0) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(currentPing).append("ms");
+        }
+        
+        // Добавляем скорость
+        String speedText = formatSpeedForNotification();
+        if (speedText != null) {
+            if (textBuilder.length() > 0) {
+                textBuilder.append(" • ");
+            }
+            textBuilder.append(speedText);
+        }
+        
+        String contentTitle = "KIZ VPN";
+        String contentText;
         if (textBuilder.length() > 0) {
             contentText = textBuilder.toString();
+        } else {
+            contentText = "Подключено";
         }
         
         // Канал уже создан с IMPORTANCE_LOW в startVPN() или onCreate()
@@ -872,18 +927,41 @@ public class KizVpnService extends VpnService implements SocketProtect {
         // Используем монохромную PNG иконку для статус бара
         int iconResId = R.drawable.kiz_vpn_mono;
         
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("KIZ VPN")
-            .setContentText(contentText)
-            .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle()
-                .bigText(contentText))
+        // Вычисляем прогресс трафика для полоски в уведомлении
+        int trafficProgressPercent = 0;
+        // Показываем прогресс только для ограниченных подписок (не больше 500 GB)
+        if (subscriptionUsedTraffic >= 0 && subscriptionTotalTraffic > 0 && subscriptionTotalTraffic <= 500L * 1024 * 1024 * 1024) {
+            trafficProgressPercent = (int) ((subscriptionUsedTraffic * 100) / subscriptionTotalTraffic);
+            if (trafficProgressPercent > 100) trafficProgressPercent = 100;
+        }
+        
+        // Создаём кастомный layout для уведомления
+        RemoteViews customView = new RemoteViews(getPackageName(), R.layout.notification_custom);
+        customView.setTextViewText(R.id.notification_text, contentText);
+        
+        // Убираем дополнительную строку - всё теперь в одной строке
+        customView.setViewVisibility(R.id.notification_extra_info, android.view.View.GONE);
+        
+        // Настраиваем полосу прогресса (только для ограниченных подписок)
+        if (subscriptionUsedTraffic >= 0 && subscriptionTotalTraffic > 0 && subscriptionTotalTraffic <= 500L * 1024 * 1024 * 1024) {
+            customView.setProgressBar(R.id.notification_progress, 100, trafficProgressPercent, false);
+            customView.setViewVisibility(R.id.notification_progress, android.view.View.VISIBLE);
+        } else {
+            customView.setViewVisibility(R.id.notification_progress, android.view.View.GONE);
+        }
+        
+        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(iconResId)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setShowWhen(false) // Убираем время
             .setAutoCancel(false)
-            .build();
+            .setCustomContentView(customView) // Кастомный layout для свёрнутого уведомления
+            .setStyle(new androidx.core.app.NotificationCompat.DecoratedCustomViewStyle()); // Стиль для кастомного уведомления
+        
+        Notification notification = notificationBuilder.build();
         
         // Обновляем уведомление
         NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -1222,10 +1300,25 @@ public class KizVpnService extends VpnService implements SocketProtect {
         public KizVpnService getService() {
             return KizVpnService.this;
         }
+        
+        public void refreshSubscriptionInfo() {
+            KizVpnService.this.loadSubscriptionInfo();
+            if (KizVpnService.this.vpnState == VPNState.CONNECTED) {
+                KizVpnService.this.updateNotification();
+            }
+        }
+        
+        public void updatePing(int ping) {
+            KizVpnService.this.setPingInfo(ping);
+        }
+        
+        public void updateSpeed(long downloadSpeed, long uploadSpeed) {
+            KizVpnService.this.setSpeedInfo(downloadSpeed, uploadSpeed);
+        }
     }
     
     /**
-     * Форматирует трафик в удобочитаемый вид (с точностью до 2 знаков после запятой для MB, GB, TB)
+     * Форматирует трафик в компактном виде (например, 822,93 MB -> 0,8GB)
      */
     private String formatBytes(long bytes) {
         double kb = bytes / 1024.0;
@@ -1237,15 +1330,28 @@ public class KizVpnService extends VpnService implements SocketProtect {
         String formatted;
         
         if (tb >= 1.0) {
-            formatted = String.format(locale, "%.2f TB", tb);
-        } else if (gb >= 1.0) {
-            formatted = String.format(locale, "%.2f GB", gb);
+            // Для TB: если целое число, не показываем десятичные
+            if (tb == (int) tb) {
+                formatted = String.format(locale, "%.0fTB", tb);
+            } else {
+                formatted = String.format(locale, "%.1fTB", tb);
+            }
+        } else if (gb >= 0.1) {
+            // Для GB: если целое число, не показываем десятичные
+            if (gb == (int) gb) {
+                formatted = String.format(locale, "%.0fGB", gb);
+            } else {
+                formatted = String.format(locale, "%.1fGB", gb);
+            }
+        } else if (mb >= 100.0) {
+            // Если MB >= 100, показываем в GB с одним знаком
+            formatted = String.format(locale, "%.1fGB", gb);
         } else if (mb >= 1.0) {
-            formatted = String.format(locale, "%.2f MB", mb);
+            formatted = String.format(locale, "%.0fMB", mb);   // Целые MB
         } else if (kb >= 1.0) {
-            formatted = String.format(locale, "%.2f KB", kb);
+            formatted = String.format(locale, "%.0fKB", kb);   // Целые KB
         } else {
-            return bytes + " B";
+            return bytes + "B";
         }
         
         // Заменяем точку на запятую для русской локали
@@ -1257,6 +1363,7 @@ public class KizVpnService extends VpnService implements SocketProtect {
     
     /**
      * Форматирует трафик в формате "45.79 MB / 50 GB" (использовано / всего)
+     * Для безлимитных подписок: "Безлимит • X GB / ∞"
      */
     private String formatTrafficForNotification() {
         if (subscriptionUsedTraffic < 0) {
@@ -1265,14 +1372,62 @@ public class KizVpnService extends VpnService implements SocketProtect {
         
         String usedText = formatBytes(subscriptionUsedTraffic);
         String totalText;
+        boolean isUnlimitedTraffic = false;
         
-        if (subscriptionTotalTraffic > 0) {
-            totalText = formatBytes(subscriptionTotalTraffic);
-        } else {
+        // Проверяем безлимитность ТОЛЬКО по трафику: если totalTraffic <= 0 или очень большое число (больше 500 GB)
+        if (subscriptionTotalTraffic <= 0 || subscriptionTotalTraffic > 500L * 1024 * 1024 * 1024) {
             totalText = "∞";
+            isUnlimitedTraffic = true;
+        } else {
+            totalText = formatBytes(subscriptionTotalTraffic);
         }
         
-        return usedText + " / " + totalText;
+        // "Безлимит" показываем ТОЛЬКО если трафик действительно безлимитный
+        // Если подписка ограничена по времени (есть дни), но безлимитная по трафику - не показываем "Безлимит"
+        boolean hasTimeLimitation = (subscriptionDays > 0);
+        
+        if (isUnlimitedTraffic && !hasTimeLimitation) {
+            return "Безлимит • " + usedText + " / " + totalText;
+        } else {
+            return usedText + " / " + totalText;
+        }
+    }
+    
+    /**
+     * Форматирует скорость в компактном виде для уведомления (например, "20kb ↑↓ 3kb")
+     */
+    private String formatSpeedForNotification() {
+        if (currentDownloadSpeed <= 0 && currentUploadSpeed <= 0) {
+            Log.d(TAG, "formatSpeedForNotification: No speed data (download=" + currentDownloadSpeed + ", upload=" + currentUploadSpeed + ")");
+            return null;
+        }
+        
+        String downloadText = formatSpeedCompact(currentDownloadSpeed);
+        String uploadText = formatSpeedCompact(currentUploadSpeed);
+        
+        String result = downloadText + " ↓↑ " + uploadText;
+        Log.d(TAG, "formatSpeedForNotification: " + result + " (download=" + currentDownloadSpeed + "B/s, upload=" + currentUploadSpeed + "B/s)");
+        return result;
+    }
+    
+    /**
+     * Форматирует скорость в компактном виде (KB/s)
+     */
+    private String formatSpeedCompact(long bytesPerSecond) {
+        if (bytesPerSecond <= 0) {
+            return "0kb";
+        }
+        
+        double kbps = bytesPerSecond / 1024.0;
+        
+        if (kbps >= 1024.0) {
+            double mbps = kbps / 1024.0;
+            return String.format(java.util.Locale.getDefault(), "%.1fmb", mbps);
+        } else if (kbps >= 1.0) {
+            return String.format(java.util.Locale.getDefault(), "%.0fkb", kbps);
+        } else {
+            return "0kb";
+        }
     }
 }
 

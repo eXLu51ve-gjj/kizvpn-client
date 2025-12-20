@@ -177,11 +177,184 @@ fun BottomMenuDropdown(
     onShowWireGuard: () -> Unit = {},
     onShowVpnConfig: () -> Unit = {}, // Новая функция для настройки VPN
     onShowNetworkChart: () -> Unit = {}, // Новая функция для графика сети
-    buttonPosition: androidx.compose.ui.geometry.Offset? = null
+    buttonPosition: androidx.compose.ui.geometry.Offset? = null,
+    subscriptionInfo: com.kizvpn.client.data.SubscriptionInfo? = null,
+    isVpnConnected: Boolean = false,
+    onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {},
+    viewModel: com.kizvpn.client.ui.viewmodel.VpnViewModel? = null
 ) {
     val zenterFontFamily = getJuraFontFamily()
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    // Состояние для пинга
+    var currentPing by remember { mutableStateOf<Int?>(null) }
+    var isPinging by remember { mutableStateOf(false) }
+    
+    // Функция для получения пинга текущего сервера
+    fun pingCurrentServer() {
+        if (isPinging || !isVpnConnected) {
+            android.util.Log.d("BottomMenuDropdown", "Ping skipped: isPinging=$isPinging, isVpnConnected=$isVpnConnected")
+            return
+        }
+        
+        coroutineScope.launch {
+            isPinging = true
+            android.util.Log.d("BottomMenuDropdown", "Starting ping...")
+            try {
+                // Получаем текущий конфиг используя ту же логику что и getSavedConfig
+                val prefs = context.getSharedPreferences("KizVpnPrefs", Context.MODE_PRIVATE)
+                val activeConfigType = prefs.getString("active_config_type", null)
+                android.util.Log.d("BottomMenuDropdown", "Active config type: $activeConfigType")
+                
+                val vlessConfig = prefs.getString("saved_config", null)
+                val wireGuardConfig = prefs.getString("saved_wireguard_config", null)
+                
+                val currentConfig = when (activeConfigType) {
+                    "wireguard" -> {
+                        if (!wireGuardConfig.isNullOrBlank()) {
+                            android.util.Log.d("BottomMenuDropdown", "Using WireGuard config")
+                            wireGuardConfig
+                        } else {
+                            android.util.Log.w("BottomMenuDropdown", "WireGuard config is null but activeConfigType = wireguard")
+                            null
+                        }
+                    }
+                    "vless", null -> {
+                        if (!vlessConfig.isNullOrBlank()) {
+                            android.util.Log.d("BottomMenuDropdown", "Using VLESS config")
+                            vlessConfig
+                        } else if (!wireGuardConfig.isNullOrBlank()) {
+                            android.util.Log.d("BottomMenuDropdown", "No VLESS config, using WireGuard as fallback")
+                            wireGuardConfig
+                        } else {
+                            android.util.Log.w("BottomMenuDropdown", "No configs available")
+                            null
+                        }
+                    }
+                    else -> {
+                        android.util.Log.w("BottomMenuDropdown", "Unknown activeConfigType: $activeConfigType")
+                        vlessConfig ?: wireGuardConfig
+                    }
+                }
+                
+                android.util.Log.d("BottomMenuDropdown", "Current config length: ${currentConfig?.length ?: 0}")
+                
+                if (currentConfig != null) {
+                    // Парсим конфиг для получения хоста и порта
+                    val configParser = com.kizvpn.client.config.ConfigParser()
+                    val parsedConfig = configParser.parseConfig(currentConfig)
+                    
+                    android.util.Log.d("BottomMenuDropdown", "Parsed config - server: ${parsedConfig?.server}, port: ${parsedConfig?.port}, protocol: ${parsedConfig?.protocol}")
+                    android.util.Log.d("BottomMenuDropdown", "Config preview: ${currentConfig.take(100)}...")
+                    
+                    // Для VLESS используем server, для WireGuard тоже server (из endpoint)
+                    val serverHost = parsedConfig?.server
+                    val serverPort = parsedConfig?.port
+                    
+                    if (serverHost != null && serverPort != null) {
+                        android.util.Log.d("BottomMenuDropdown", "Pinging $serverHost:$serverPort")
+                        val ping = com.kizvpn.client.util.PingUtil.pingServer(
+                            serverHost, 
+                            serverPort
+                        )
+                        android.util.Log.d("BottomMenuDropdown", "Ping result: $ping ms")
+                        currentPing = ping
+                        
+                        // Обновляем пинг в VPN сервисе для уведомления
+                        if (ping != null && ping > 0) {
+                            updateVpnServicePing(context, ping)
+                        }
+                    } else {
+                        android.util.Log.w("BottomMenuDropdown", "No server or port in parsed config - server: $serverHost, port: $serverPort")
+                        
+                        // Fallback: попробуем извлечь хост и порт вручную для простых случаев
+                        try {
+                            var fallbackHost: String? = null
+                            var fallbackPort: Int? = null
+                            
+                            if (currentConfig.startsWith("vless://")) {
+                                // Простой парсинг VLESS: vless://uuid@host:port?...
+                                val hostPortRegex = Regex("@([^:]+):(\\d+)")
+                                val match = hostPortRegex.find(currentConfig)
+                                if (match != null) {
+                                    fallbackHost = match.groupValues[1]
+                                    fallbackPort = match.groupValues[2].toIntOrNull()
+                                }
+                            } else if (currentConfig.contains("Endpoint")) {
+                                // Простой парсинг WireGuard: Endpoint = host:port
+                                val endpointRegex = Regex("Endpoint\\s*=\\s*([^:]+):(\\d+)")
+                                val match = endpointRegex.find(currentConfig)
+                                if (match != null) {
+                                    fallbackHost = match.groupValues[1]
+                                    fallbackPort = match.groupValues[2].toIntOrNull()
+                                }
+                            }
+                            
+                            if (fallbackHost != null && fallbackPort != null) {
+                                android.util.Log.d("BottomMenuDropdown", "Using fallback parsing - pinging $fallbackHost:$fallbackPort")
+                                val ping = com.kizvpn.client.util.PingUtil.pingServer(
+                                    fallbackHost, 
+                                    fallbackPort
+                                )
+                                android.util.Log.d("BottomMenuDropdown", "Fallback ping result: $ping ms")
+                                currentPing = ping
+                                
+                                // Обновляем пинг в VPN сервисе для уведомления
+                                if (ping != null && ping > 0) {
+                                    updateVpnServicePing(context, ping)
+                                }
+                            } else {
+                                android.util.Log.w("BottomMenuDropdown", "Fallback parsing also failed")
+                                currentPing = null
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("BottomMenuDropdown", "Fallback parsing error", e)
+                            currentPing = null
+                        }
+                    }
+                } else {
+                    android.util.Log.w("BottomMenuDropdown", "No current config found")
+                    currentPing = null
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("BottomMenuDropdown", "Error pinging server", e)
+                currentPing = null
+            } finally {
+                isPinging = false
+                android.util.Log.d("BottomMenuDropdown", "Ping finished, result: $currentPing")
+            }
+        }
+    }
+    
+    // Периодический пинг при подключенном VPN
+    LaunchedEffect(isVpnConnected, showMenu) {
+        if (isVpnConnected && showMenu) {
+            // Пингуем сразу при открытии меню
+            pingCurrentServer()
+            
+            // Затем пингуем каждые 10 секунд
+            while (isVpnConnected && showMenu) {
+                delay(10000) // 10 секунд
+                pingCurrentServer()
+            }
+        }
+    }
+    
+    // Создаем состояние для хранения актуальной информации о подписке
+    // Всегда используем информацию из ViewModel, если она доступна, иначе используем переданную
+    val viewModelSubscriptionInfo by viewModel?.subscriptionInfo?.collectAsState() ?: remember { mutableStateOf(null) }
+    var effectiveSubscriptionInfo by remember {
+        mutableStateOf(viewModelSubscriptionInfo ?: subscriptionInfo)
+    }
+    
+    // Обновляем информацию при изменении состояния VPN или при открытии меню
+    LaunchedEffect(subscriptionInfo, showMenu, viewModelSubscriptionInfo) {
+        // Всегда используем информацию из ViewModel как приоритетную
+        // НЕ зависим от состояния VPN - подписка должна быть постоянной
+        effectiveSubscriptionInfo = viewModelSubscriptionInfo ?: subscriptionInfo
+    }
 
     // Создаем состояния анимации для каждого элемента (теперь 8 элементов)
     val animationStates = remember {
@@ -372,16 +545,33 @@ fun BottomMenuDropdown(
                 )
 
                 menuItems.forEachIndexed { index, (text, iconResId, action) ->
-                    AnimatedMenuItem(
-                        text = text,
-                        animationState = animationStates[7 - index],
-                        iconResId = iconResId,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            action()
-                        },
-                        zenterFontFamily = zenterFontFamily
-                    )
+                    // Для первого пункта (Подписка) показываем дополнительную информацию когда есть данные о подписке
+                    if (index == 0 && effectiveSubscriptionInfo != null) {
+                        AnimatedMenuItemWithSubscription(
+                            text = text,
+                            animationState = animationStates[7 - index],
+                            iconResId = iconResId,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                action()
+                            },
+                            zenterFontFamily = zenterFontFamily,
+                            subscriptionInfo = effectiveSubscriptionInfo!!, // Явно указываем, что значение не null
+                            currentPing = currentPing,
+                            isPinging = isPinging
+                        )
+                    } else {
+                        AnimatedMenuItem(
+                            text = text,
+                            animationState = animationStates[7 - index],
+                            iconResId = iconResId,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                action()
+                            },
+                            zenterFontFamily = zenterFontFamily
+                        )
+                    }
                 }
             }
         }
@@ -1699,8 +1889,8 @@ fun AnimatedMenuItem(
                 Image(
                     painter = painterResource(id = iconResId),
                     contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    colorFilter = ColorFilter.tint(Color(0xFFFF9500))
+                    modifier = Modifier.size(26.dp), // Увеличено с 22dp до 26dp
+                    colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
                 )
             }
 
@@ -1747,6 +1937,245 @@ fun AnimatedMenuItem(
                                 shape = MaterialTheme.shapes.small
                             )
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Пункт меню с анимацией и информацией о подписке
+ */
+@Composable
+fun AnimatedMenuItemWithSubscription(
+    text: String,
+    animationState: MenuItemAnimationState,
+    onClick: () -> Unit,
+    zenterFontFamily: FontFamily,
+    iconResId: Int? = null,
+    subscriptionInfo: com.kizvpn.client.data.SubscriptionInfo,
+    currentPing: Int? = null,
+    isPinging: Boolean = false
+) {
+    // Анимация нажатия
+    var isPressed by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "press_scale"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset(x = (animationState.offset.value * 250).dp)
+            .alpha(animationState.opacity.value)
+            .scale(animationState.scale.value * pressScale)
+            .graphicsLayer {
+                rotationZ = animationState.rotation.value
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (iconResId != null) {
+                Image(
+                    painter = painterResource(id = iconResId),
+                    contentDescription = null,
+                    modifier = Modifier.size(26.dp), // Увеличено с 22dp до 26dp
+                    colorFilter = ColorFilter.tint(Color.White) // Изменено с оранжевого на белый
+                )
+            }
+
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        onClick = onClick,
+                        onClickLabel = text
+                    ),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black.copy(alpha = 0.75f)
+                ),
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 6.dp,
+                    pressedElevation = 8.dp
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 18.dp)
+                ) {
+                    // Первая строка: название и точка
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = zenterFontFamily,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.2.sp
+                                ),
+                                color = Color.White.copy(alpha = 0.95f)
+                            )
+                            
+                            // Пинг бейдж (динамический)
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when {
+                                        isPinging -> Color(0xFFFF9500) // Оранжевый при пинге
+                                        currentPing == null -> Color(0xFFFF3B30) // Красный если нет пинга
+                                        currentPing!! < 100 -> Color(0xFF34C759) // Зеленый для хорошего пинга
+                                        currentPing!! < 300 -> Color(0xFFFF9500) // Оранжевый для среднего пинга
+                                        else -> Color(0xFFFF3B30) // Красный для плохого пинга
+                                    }
+                                ),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        isPinging -> "..."
+                                        currentPing != null -> "${currentPing}ms"
+                                        else -> "N/A"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Оранжевая точка
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .background(
+                                    color = Color(0xFFFF9500).copy(alpha = 0.9f),
+                                    shape = MaterialTheme.shapes.small
+                                )
+                        )
+                    }
+                    
+                    // Вторая строка: дни/часы и трафик (компактно и с цветами)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Компактное время с цветом
+                        val timeText = subscriptionInfo.formatTimeCompact()
+                        val timeColor = when {
+                            subscriptionInfo.expired -> Color(0xFFFF3B30) // Красный для истекших
+                            subscriptionInfo.unlimited -> Color(0xFF34C759) // Зеленый для безлимита
+                            (subscriptionInfo.days ?: 0) <= 3 -> Color(0xFFFF9500) // Оранжевый если меньше 3 дней
+                            else -> Color(0xFF34C759) // Зеленый для нормального времени
+                        }
+                        
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = timeColor
+                        )
+                        
+                        // Трафик (показываем всегда, если есть информация об использованном трафике)
+                        val shouldShowTraffic = subscriptionInfo.usedTraffic != null
+                        if (shouldShowTraffic) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp
+                                ),
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            
+                            val usedText = subscriptionInfo.formatUsedTrafficCompact() ?: "0 B"
+                            val totalText = if (subscriptionInfo.hasTrafficLimit()) {
+                                subscriptionInfo.formatTotalTrafficCompact() ?: "∞"
+                            } else {
+                                "∞"
+                            }
+                            
+                            // Цвет трафика в зависимости от использования
+                            val trafficProgress = if (subscriptionInfo.hasTrafficLimit() && subscriptionInfo.totalTraffic != null && subscriptionInfo.totalTraffic > 0) {
+                                (subscriptionInfo.usedTraffic?.toFloat() ?: 0f) / subscriptionInfo.totalTraffic.toFloat()
+                            } else {
+                                0f
+                            }
+                            
+                            val trafficColor = when {
+                                !subscriptionInfo.hasTrafficLimit() -> Color(0xFF34C759) // Зеленый для безлимита
+                                trafficProgress > 0.9f -> Color(0xFFFF3B30) // Красный если больше 90%
+                                trafficProgress > 0.8f -> Color(0xFFFF9500) // Оранжевый если больше 80%
+                                else -> Color(0xFF007AFF) // Синий для нормального использования
+                            }
+                            
+                            Text(
+                                text = "$usedText / $totalText",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = trafficColor
+                            )
+                        }
+                    }
+                    
+                    // Полоса трафика (если есть ограничение по трафику)
+                    if (subscriptionInfo.hasTrafficLimit()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        val usedTraffic = subscriptionInfo.usedTraffic ?: 0L
+                        val totalTraffic = subscriptionInfo.totalTraffic ?: 1L
+                        val progress = if (totalTraffic > 0) {
+                            (usedTraffic.toFloat() / totalTraffic.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                        
+                        // Полоса прогресса
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(
+                                    color = Color.White.copy(alpha = 0.2f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
+                                )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .fillMaxHeight()
+                                    .background(
+                                        color = if (progress > 0.8f) Color(0xFFFF3B30) else Color(0xFF34C759),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
+                                    )
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2903,9 +3332,10 @@ fun SettingsSwitchCard(
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(32.dp)
+                                .height(36.dp) // Увеличено с 32dp до 36dp
                                 .padding(horizontal = 4.dp)
-                                .zIndex(0f)
+                                .zIndex(0f),
+                            colorFilter = ColorFilter.tint(Color.White) // Добавлен белый цвет
                         )
                     }
 
@@ -3471,7 +3901,8 @@ fun VpnConfigModal(
     onSaveWireGuardConfig: (String) -> Unit = {},
     onSelectConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> },
     onDisconnectClick: () -> Unit = {},
-    onShowConfigNotification: (String) -> Unit = {}
+    onShowConfigNotification: (String) -> Unit = {},
+    onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {} // Callback для обновления информации о подписке в ViewModel
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -3754,7 +4185,7 @@ fun VpnConfigModal(
                         onShowConfigNotification("Подписка добавлена: ${configs.size} конфигов")
                     } else {
                         // Подписка добавлена, но конфигов нет (возможно истекла)
-                        val statusText = if (subscriptionInfo?.expired == true) "истекла" else "нет конфигов"
+                        val statusText = if (subscriptionInfo?.expired == true) "истекла" else "��ет конфигов"
                         onShowConfigNotification("Подписка добавлена ($statusText)")
                     }
                 } catch (e: Exception) {
@@ -3890,25 +4321,6 @@ fun VpnConfigModal(
         loadAllData(runPings = false) // Не перезапускаем пинги при удалении
     }
     
-    // Функция для выбора конфига
-    fun selectConfig(configItem: VpnConfigItem) {
-        prefs.edit()
-            .putString("saved_config", configItem.config)
-            .putString("saved_config_name", configItem.name)
-            .putString("active_config_type", if (configItem.protocol == "VLESS") "vless" else "wireguard")
-            .apply()
-        
-        onSelectConfig(configItem.config, 
-            if (configItem.protocol == "VLESS") 
-                com.kizvpn.client.config.ConfigParser.Protocol.VLESS 
-            else 
-                com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD
-        )
-        
-        loadAllData(runPings = false) // Не перезапускаем пинги при выборе конфига
-        onShowConfigNotification("Выбран: ${configItem.name}")
-    }
-    
     // Функция для обновления subscription
     fun refreshSubscription(blockId: String, url: String) {
         coroutineScope.launch {
@@ -3968,12 +4380,44 @@ fun VpnConfigModal(
                     }
                     
                     onShowConfigNotification("Подписка обновлена")
+                    
+                    // Обновляем информацию о подписке в основном ViewModel
+                    if (subscriptionInfo != null) {
+                        onUpdateSubscriptionInfo(subscriptionInfo)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("VpnConfigModal", "Error refreshing subscription", e)
                 onShowConfigNotification("Ошибка обновления")
             }
             refreshingBlockId = null
+        }
+    }
+    
+    // Функция для выбора конфига
+    fun selectConfig(configItem: VpnConfigItem) {
+        prefs.edit()
+            .putString("saved_config", configItem.config)
+            .putString("saved_config_name", configItem.name)
+            .putString("active_config_type", if (configItem.protocol == "VLESS") "vless" else "wireguard")
+            .apply()
+
+        onSelectConfig(configItem.config,
+            if (configItem.protocol == "VLESS")
+                com.kizvpn.client.config.ConfigParser.Protocol.VLESS
+            else
+                com.kizvpn.client.config.ConfigParser.Protocol.WIREGUARD
+        )
+
+        loadAllData(runPings = false) // Не перезапускаем пинги при выборе конфига
+        onShowConfigNotification("Выбран: ${configItem.name}")
+        
+        // Если конфиг принадлежит подписке, обновляем информацию о подписке
+        if (configItem.subscriptionId != null) {
+            val block = subscriptionBlocks.find { it.id == configItem.subscriptionId }
+            if (block != null) {
+                refreshSubscription(block.id, block.url)
+            }
         }
     }
     
@@ -4039,6 +4483,7 @@ fun VpnConfigModal(
     // Анимация
     val animationState = remember { MenuItemAnimationState() }
     var isVisible by remember { mutableStateOf(false) }
+    var isContentVisible by remember { mutableStateOf(false) }
     
     val backgroundAlpha by animateFloatAsState(
         targetValue = if (showVpnConfig) 0.7f else 0f,
@@ -4049,19 +4494,15 @@ fun VpnConfigModal(
     LaunchedEffect(showVpnConfig) {
         if (showVpnConfig) {
             isVisible = true
-            coroutineScope.launch {
-                animationState.scale.snapTo(0.8f)
-                animationState.opacity.snapTo(0f)
-                launch { animationState.scale.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
-                launch { animationState.opacity.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
-            }
+            // Небольшая задержка для плавной анимации
+            delay(50)
+            isContentVisible = true
         } else {
-            coroutineScope.launch {
-                launch { animationState.opacity.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
-                launch { animationState.scale.animateTo(0.9f, tween(300, easing = FastOutSlowInEasing)) }
-                delay(300)
-                isVisible = false
-            }
+            // Сначала скрываем контент
+            isContentVisible = false
+            // Ждем завершения анимации, потом скрываем overlay
+            delay(450)
+            isVisible = false
         }
     }
     
@@ -4101,16 +4542,45 @@ fun VpnConfigModal(
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
             contentAlignment = Alignment.Center
         ) {
-            Card(
+            // Анимация выезда справа в центр (как у других модальных окон)
+            AnimatedVisibility(
+                visible = isContentVisible,
+                enter = slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(
+                        durationMillis = 500,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(
+                        durationMillis = 500,
+                        easing = FastOutSlowInEasing
+                    )
+                ),
+                exit = slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .alpha(animationState.opacity.value)
-                    .scale(animationState.scale.value),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1F24)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1F24)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Column(
                         modifier = Modifier
@@ -4134,11 +4604,70 @@ fun VpnConfigModal(
                             )
                             
                             // Кнопки добавления с подписями слева - стиль как у CloseButton
-                            // TODO: Локализация - "QR-код" -> "QR-code", "Конфиг" -> "conf"
+                            // TODO: Локализация - "QR-код" -> "QR-code", "Конфиг" -> "conf", "Пинг всех" -> "Ping all"
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                // Пинг всех кнопка с эффектами
+                                Card(
+                                    onClick = {
+                                        // Пинг всех конфигов
+                                        coroutineScope.launch {
+                                            val allConfigs = subscriptionBlocks.flatMap { it.configs } + standaloneConfigs
+                                            allConfigs.forEach { config ->
+                                                if (config.host != "unknown" && config.host.isNotBlank()) {
+                                                    launch {
+                                                        try {
+                                                            val pingTime = com.kizvpn.client.util.PingUtil.pingServer(config.host, config.port)
+                                                            pingResults = pingResults + (config.id to pingTime)
+                                                            pingChecked = pingChecked + config.id
+                                                        } catch (e: Exception) {
+                                                            pingResults = pingResults + (config.id to null)
+                                                            pingChecked = pingChecked + config.id
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .shadow(
+                                            elevation = 8.dp,
+                                            shape = RoundedCornerShape(12.dp),
+                                            clip = false
+                                        )
+                                        .graphicsLayer {
+                                            translationY = -2f // Легкий подъем
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        // Иконка
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.kizvpn.client.R.drawable.ic_ping_all),
+                                            contentDescription = "Пинг всех",
+                                            tint = Color(0xFF4FC3F7),
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        // Текст
+                                        Text(
+                                            text = "Пинг всех", // EN: "Ping all"
+                                            color = Color(0xFFFF9800),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                
                                 // QR-код кнопка с эффектами
                                 Card(
                                     onClick = { showQrScanner = true },
@@ -4226,65 +4755,14 @@ fun VpnConfigModal(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Заголовок Subscription и кнопка "пинг всех"
+                            // Заголовок Subscription
                             if (subscriptionBlocks.isNotEmpty()) {
                                 item {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Subscription",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = Color.White.copy(alpha = 0.7f)
-                                        )
-                                        
-                                        // Кнопка "пинг всех" со стилем как у CloseButton
-                                        Card(
-                                            onClick = {
-                                                // Обновить пинги для всех конфигов
-                                                coroutineScope.launch {
-                                                    val allConfigs = subscriptionBlocks.flatMap { it.configs } + standaloneConfigs
-                                                    allConfigs.forEach { config ->
-                                                        if (config.host != "unknown" && config.host.isNotBlank()) {
-                                                            launch {
-                                                                try {
-                                                                    val pingTime = com.kizvpn.client.util.PingUtil.pingServer(config.host, config.port)
-                                                                    pingResults = pingResults + (config.id to pingTime)
-                                                                    pingChecked = pingChecked + config.id
-                                                                } catch (e: Exception) {
-                                                                    pingResults = pingResults + (config.id to -1)
-                                                                    pingChecked = pingChecked + config.id
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier
-                                                .shadow(
-                                                    elevation = 8.dp,
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    clip = false
-                                                )
-                                                .graphicsLayer {
-                                                    translationY = -2f
-                                                },
-                                            shape = RoundedCornerShape(12.dp),
-                                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
-                                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x20FFFFFF))
-                                        ) {
-                                            Text(
-                                                text = "пинг всех",
-                                                color = Color.White.copy(alpha = 0.8f),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                            )
-                                        }
-                                    }
+                                    Text(
+                                        text = "Subscription",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
                                 }
                             }
                             
@@ -4553,14 +5031,15 @@ fun VpnConfigModal(
                 }
             )
         }
-    }
+        } // Закрытие AnimatedVisibility
+    } // Закрытие Box
 }
 
 /**
  * Карточка блока подписки
  */
 @Composable
-private fun SubscriptionBlockCard(
+fun SubscriptionBlockCard(
     block: VpnSubscriptionBlock,
     pingResults: Map<String, Int?>,
     isRefreshing: Boolean,
@@ -4793,7 +5272,7 @@ private fun SubscriptionBlockCard(
  * Карточка отдельного конфига
  */
 @Composable
-private fun ConfigItemCard(
+fun ConfigItemCard(
     config: VpnConfigItem,
     ping: Int?,
     onSelect: () -> Unit,
@@ -5026,5 +5505,24 @@ private fun ConfigItemCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Обновление пинга в VPN сервисе для уведомления
+ */
+private fun updateVpnServicePing(context: Context, ping: Int) {
+    try {
+        val serviceIntent = Intent(context, com.kizvpn.client.vpn.KizVpnService::class.java)
+        context.bindService(serviceIntent, object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
+                val binder = service as? com.kizvpn.client.vpn.KizVpnService.KizVpnBinder
+                binder?.updatePing(ping)
+                context.unbindService(this)
+            }
+            override fun onServiceDisconnected(name: android.content.ComponentName?) {}
+        }, Context.BIND_AUTO_CREATE)
+    } catch (e: Exception) {
+        android.util.Log.e("BottomMenuButton", "Error updating VPN service ping", e)
     }
 }

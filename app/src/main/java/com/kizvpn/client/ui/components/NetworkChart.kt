@@ -21,8 +21,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.coroutines.delay
 import co.yml.charts.axis.AxisData
 import co.yml.charts.common.model.Point
 import co.yml.charts.ui.linechart.LineChart
@@ -82,19 +88,88 @@ fun NetworkStatsModal(
     totalUploaded: String,
     sessionTime: String
 ) {
-    if (showStats) {
+    // Анимация слайда справа
+    var currentOffsetX by remember { mutableStateOf(2000f) } // Начинаем справа за экраном
+    val targetOffsetX = if (showStats) 0f else 2000f // Уезжает вправо за экран
+    
+    val offsetX by animateFloatAsState(
+        targetValue = targetOffsetX,
+        animationSpec = tween(
+            durationMillis = if (showStats) 400 else 300,
+            easing = FastOutSlowInEasing
+        ),
+        label = "network_chart_slide"
+    )
+    
+    // Обновляем текущее значение для следующей анимации
+    LaunchedEffect(offsetX) {
+        currentOffsetX = offsetX
+    }
+    
+    // При открытии устанавливаем начальное значение справа
+    LaunchedEffect(showStats) {
+        if (showStats) {
+            currentOffsetX = 2000f // Начинаем справа
+        }
+    }
+    
+    var isVisible by remember { mutableStateOf(false) }
+    
+    val backgroundAlpha by animateFloatAsState(
+        targetValue = if (showStats) 0.7f else 0f,
+        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        label = "network_chart_background_alpha"
+    )
+    
+    LaunchedEffect(showStats) {
+        if (showStats) {
+            isVisible = true
+        } else {
+            delay(300)
+            isVisible = false
+        }
+    }
+    
+    val backgroundInteractionSource = remember { MutableInteractionSource() }
+    
+    if (isVisible || showStats) {
+        // Затемняющий фон
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(10000f) // Поверх всех кнопок
-                .background(Color.Black.copy(alpha = 0.7f))
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp), // Изначальный padding
-            contentAlignment = Alignment.Center
+                .zIndex(10000f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = backgroundAlpha))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = backgroundInteractionSource,
+                        indication = null,
+                        onClick = onDismiss
+                    )
+            )
+        }
+        
+        // Модальное окно
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(10001f) // Поверх всех кнопок
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
+            contentAlignment = Alignment.Center // Центрируем, но offset сдвинет вправо
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        translationX = offsetX
+                    }, // Слайд анимация
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1F24)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)

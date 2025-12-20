@@ -19,8 +19,20 @@ object PingUtil {
      */
     suspend fun pingServer(host: String, port: Int): Int? = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "Starting ping to $host:$port with timeout ${PING_TIMEOUT_MS}ms")
             val startTime = System.currentTimeMillis()
             val socket = Socket()
+            
+            // Добавляем дополнительную проверку хоста
+            if (host.isBlank()) {
+                Log.w(TAG, "Host is blank")
+                return@withContext null
+            }
+            
+            if (port <= 0 || port > 65535) {
+                Log.w(TAG, "Invalid port: $port")
+                return@withContext null
+            }
             
             socket.connect(InetSocketAddress(host, port), PING_TIMEOUT_MS)
             socket.close()
@@ -29,10 +41,16 @@ object PingUtil {
             Log.d(TAG, "Ping to $host:$port = ${ping}ms")
             ping
         } catch (e: SocketTimeoutException) {
-            Log.w(TAG, "Ping timeout to $host:$port")
+            Log.w(TAG, "Ping timeout to $host:$port after ${PING_TIMEOUT_MS}ms")
+            null
+        } catch (e: java.net.UnknownHostException) {
+            Log.w(TAG, "Unknown host: $host")
+            null
+        } catch (e: java.net.ConnectException) {
+            Log.w(TAG, "Connection refused to $host:$port")
             null
         } catch (e: Exception) {
-            Log.w(TAG, "Ping failed to $host:$port: ${e.message}")
+            Log.w(TAG, "Ping failed to $host:$port: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
@@ -48,6 +66,21 @@ object PingUtil {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

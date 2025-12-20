@@ -23,6 +23,7 @@ import kotlinx.coroutines.coroutineScope
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -237,6 +238,7 @@ fun HomeScreen(
             size = 230.dp, // Визуальный размер кнопки (уменьшен с 250.dp)
             clickableSize = 120.dp // Круглая зона нажатия (уменьшена еще больше)
         )
+        
         
         // Левая кнопка - видео в левом нижнем углу
         VideoButton(
@@ -503,6 +505,10 @@ fun HomeScreen(
             onShowConfigNotification = { message ->
                 // Показываем уведомление сверху экрана
                 onShowConfigNotification(message)
+            },
+            onUpdateSubscriptionInfo = { subscriptionInfo ->
+                // Обновляем информацию о подписке через ViewModel
+                viewModel?.updateSubscriptionInfo(subscriptionInfo)
             }
         )
         
@@ -538,7 +544,11 @@ fun HomeScreen(
             onShowNetworkChart = {
                 showNetworkChartModal = true
                 showMenuDropdown = false
-            }
+            },
+            subscriptionInfo = subscriptionInfo,
+            isVpnConnected = isConnected,
+            onUpdateSubscriptionInfo = { /* Обновление подписки в HomeScreen не требуется */ },
+            viewModel = viewModel
         )
 
         // Модальное окно маршрутизации
@@ -598,7 +608,10 @@ fun HomeScreen(
             
             NetworkStatsModal(
                 showStats = showNetworkChartModal,
-                onDismiss = { showNetworkChartModal = false },
+                onDismiss = { 
+                    showNetworkChartModal = false
+                    showMenuDropdown = true // Открываем меню при закрытии
+                },
                 downloadData = downloadChartData,
                 uploadData = uploadChartData,
                 currentDownloadSpeed = currentDownloadSpeed,

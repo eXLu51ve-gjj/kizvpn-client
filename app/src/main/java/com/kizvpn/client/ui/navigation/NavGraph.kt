@@ -50,7 +50,10 @@ fun AppNavHost(
     onDeleteConfig: (String, com.kizvpn.client.config.ConfigParser.Protocol) -> Unit = { _, _ -> },
     configNotification: String? = null,
     onShowConfigNotification: (String) -> Unit = {}, // Callback для показа уведомления сверху экрана
-    onSubscriptionUrlCheck: ((String) -> Unit)? = null // Callback для проверки subscription URL
+    onSubscriptionUrlCheck: ((String) -> Unit)? = null, // Callback для проверки subscription URL
+    onShowNetworkChart: () -> Unit = {}, // Callback для показа графика сети
+    isVpnConnected: Boolean = false, // Статус подключения VPN
+    onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {} // Callback для обновления информации о подписке
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
