@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App Links configuration -->
+    <string name="app_link_host_kizvpn">host.kizvpn.ru</string>
+    <string name="app_link_kizvpn">kizvpn.ru</string>
+    <string name="app_link_path_sub">/sub</string>
+</resources>

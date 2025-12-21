@@ -92,7 +92,8 @@ fun HomeScreen(
     subscriptionInfo: SubscriptionInfo? = null,
     viewModel: com.kizvpn.client.ui.viewmodel.VpnViewModel? = null,
     configNotification: String? = null,
-    onShowConfigNotification: (String) -> Unit = {} // Callback для показа уведомления сверху экрана
+    onShowConfigNotification: (String) -> Unit = {}, // Callback для показа уведомления сверху экрана
+    biometricAuthManager: com.kizvpn.client.security.BiometricAuthManager? = null // Добавляем BiometricAuthManager
 ) {
     val isConnected = connectionStatus.isConnected
     val isConnecting = connectionStatus.isConnecting
@@ -316,14 +317,14 @@ fun HomeScreen(
                         contentScale = ContentScale.Fit
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    // Текст уведомления (белый как в меню)
+                    // Текст уведомления (оранжевый цвет)
                     Text(
                         text = connectionNotificationText,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = Color.White.copy(alpha = 0.95f)
+                        color = Color(0xFFFF6B35).copy(alpha = 0.95f)
                     )
                 }
             }
@@ -464,7 +465,8 @@ fun HomeScreen(
             onOpenRouting = {
                 showSettingsModal = false
                 showRoutingModal = true
-            }
+            },
+            biometricAuthManager = biometricAuthManager // Передаем BiometricAuthManager
         )
         
         // Модальное окно истории
@@ -554,7 +556,8 @@ fun HomeScreen(
             subscriptionInfo = subscriptionInfo,
             isVpnConnected = isConnected,
             onUpdateSubscriptionInfo = { /* Обновление подписки в HomeScreen не требуется */ },
-            viewModel = viewModel
+            viewModel = viewModel,
+            biometricAuthManager = biometricAuthManager // Передаем BiometricAuthManager
         )
 
         // Модальное окно маршрутизации

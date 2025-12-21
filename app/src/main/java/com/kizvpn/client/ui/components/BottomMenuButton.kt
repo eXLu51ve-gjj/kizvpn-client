@@ -62,6 +62,9 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.compose.ui.platform.LocalContext
 import android.util.Log
 import androidx.compose.ui.res.painterResource
@@ -181,7 +184,8 @@ fun BottomMenuDropdown(
     subscriptionInfo: com.kizvpn.client.data.SubscriptionInfo? = null,
     isVpnConnected: Boolean = false,
     onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {},
-    viewModel: com.kizvpn.client.ui.viewmodel.VpnViewModel? = null
+    viewModel: com.kizvpn.client.ui.viewmodel.VpnViewModel? = null,
+    biometricAuthManager: com.kizvpn.client.security.BiometricAuthManager? = null // Добавляем BiometricAuthManager
 ) {
     val zenterFontFamily = getJuraFontFamily()
     val haptic = LocalHapticFeedback.current
@@ -2114,11 +2118,7 @@ fun AnimatedMenuItemWithSubscription(
                             )
                             
                             val usedText = subscriptionInfo.formatUsedTrafficCompact() ?: "0 B"
-                            val totalText = if (subscriptionInfo.hasTrafficLimit()) {
-                                subscriptionInfo.formatTotalTrafficCompact() ?: "∞"
-                            } else {
-                                "∞"
-                            }
+                            val totalText = subscriptionInfo.formatTotalTrafficCompact() ?: "∞"
                             
                             // Цвет трафика в зависимости от использования
                             val trafficProgress = if (subscriptionInfo.hasTrafficLimit() && subscriptionInfo.totalTraffic != null && subscriptionInfo.totalTraffic > 0) {
@@ -2697,12 +2697,17 @@ fun SettingsModal(
     onNotificationsChange: (Boolean) -> Unit = {},
     initialAutoConnect: Boolean = false,
     initialNotifications: Boolean = true,
-    onOpenRouting: () -> Unit = {}
+    onOpenRouting: () -> Unit = {},
+    biometricAuthManager: com.kizvpn.client.security.BiometricAuthManager? = null // Добавляем BiometricAuthManager
 ) {
     val zenterFontFamily = getJuraFontFamily()
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    
+    // Получаем локализованные строки заранее
+    val appSecurityTitle = localizedString(R.string.app_security)
+    val biometricSubtitle = localizedString(R.string.biometric_subtitle_app)
     
     // Загружаем настройки из SharedPreferences
     var useAutoConnect by remember { 
@@ -3119,7 +3124,7 @@ fun SettingsModal(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         SettingsSwitchCard(
-                            title = localizedString(R.string.auto_connect),
+                            title = localizedString(R.string.auto_connect_title),
                             description = "",
                             checked = useAutoConnect,
                             onCheckedChange = { newValue ->
@@ -3156,6 +3161,23 @@ fun SettingsModal(
                             description = "",
                             checked = useNotifications,
                             onCheckedChange = { newValue ->
+                                if (newValue) {
+                                    // Если включаем уведомления, запрашиваем системное разрешение
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                                            // Запрашиваем разрешение через MainActivity
+                                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                            }
+                                            try {
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("BottomMenuButton", "Failed to open notification settings", e)
+                                            }
+                                        }
+                                    }
+                                }
+                                
                                 useNotifications = newValue
                                 // Сохраняем в SharedPreferences
                                 context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
@@ -3221,12 +3243,63 @@ fun SettingsModal(
                             description = "",
                             checked = securityEnabled,
                             onCheckedChange = { newValue ->
-                                securityEnabled = newValue
-                                // Сохраняем в SharedPreferences
-                                context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
-                                    .edit()
-                                    .putBoolean("security_enabled", newValue)
-                                    .apply()
+                                if (newValue) {
+                                    // Если включаем безопасность, запрашиваем биометрическую аутентификацию
+                                    if (biometricAuthManager != null && biometricAuthManager.isBiometricAvailable()) {
+                                        android.util.Log.d("BottomMenuButton", "Requesting biometric authentication for security")
+                                        
+                                        // Получаем Activity из context
+                                        val activity = context as? androidx.fragment.app.FragmentActivity
+                                        if (activity != null) {
+                                            biometricAuthManager.authenticate(
+                                                activity = activity,
+                                                title = appSecurityTitle,
+                                                subtitle = biometricSubtitle,
+                                                onSuccess = {
+                                                    android.util.Log.d("BottomMenuButton", "Biometric authentication successful - enabling security")
+                                                    securityEnabled = true
+                                                    // Сохраняем в SharedPreferences
+                                                    context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                                        .edit()
+                                                        .putBoolean("security_enabled", true)
+                                                        .apply()
+                                                },
+                                                onError = { error ->
+                                                    android.util.Log.e("BottomMenuButton", "Biometric authentication failed: $error")
+                                                    // Не включаем безопасность при ошибке
+                                                    securityEnabled = false
+                                                },
+                                                onCancel = {
+                                                    android.util.Log.d("BottomMenuButton", "Biometric authentication cancelled")
+                                                    // Не включаем безопасность при отмене
+                                                    securityEnabled = false
+                                                }
+                                            )
+                                        } else {
+                                            android.util.Log.e("BottomMenuButton", "Activity not found for biometric authentication")
+                                            securityEnabled = newValue
+                                            context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                                .edit()
+                                                .putBoolean("security_enabled", newValue)
+                                                .apply()
+                                        }
+                                    } else {
+                                        android.util.Log.w("BottomMenuButton", "Biometric authentication not available")
+                                        // Если биометрия недоступна, просто включаем настройку
+                                        securityEnabled = newValue
+                                        context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                            .edit()
+                                            .putBoolean("security_enabled", newValue)
+                                            .apply()
+                                    }
+                                } else {
+                                    // Если выключаем безопасность, просто сохраняем
+                                    securityEnabled = newValue
+                                    context.getSharedPreferences("vpn_settings", android.content.Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putBoolean("security_enabled", newValue)
+                                        .apply()
+                                }
                             },
                             zenterFontFamily = zenterFontFamily,
                             iconResId = R.drawable.off_on

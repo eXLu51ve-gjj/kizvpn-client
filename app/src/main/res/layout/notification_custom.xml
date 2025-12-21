@@ -25,7 +25,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Подключено"
-                android:textColor="@android:color/white"
+                android:textColor="#FF6B35"
                 android:textSize="14sp" />
                 
             <!-- Дополнительная информация (пинг и скорость) -->

@@ -227,9 +227,21 @@ data class SubscriptionInfo(
     
     /**
      * Форматирует общий трафик в компактном виде
+     * Возвращает "∞" для безлимитных подписок
      */
     fun formatTotalTrafficCompact(): String? {
-        if (totalTraffic == null) return null
+        // Если подписка безлимитная, возвращаем ∞
+        if (unlimited) return "∞"
+        
+        // Если дата окончания = 0 (безлимитная подписка)
+        if (expiryDate != null && (expiryDate == 0L || expiryDate < 1000000000L)) return "∞"
+        
+        // Если нет информации о трафике
+        if (totalTraffic == null) return "∞"
+        
+        // Если трафик очень большой (> 500 GB), считаем безлимитом
+        if (totalTraffic > 500L * 1024 * 1024 * 1024) return "∞"
+        
         return formatBytesCompact(totalTraffic)
     }
     
@@ -321,9 +333,23 @@ data class SubscriptionInfo(
     
     /**
      * Проверяет, есть ли ограничение по трафику
+     * Учитывает безлимитные подписки (unlimited = true или expiryDate = 0)
+     * и очень большие значения трафика (> 500GB считается безлимитом)
      */
     fun hasTrafficLimit(): Boolean {
-        return totalTraffic != null && totalTraffic > 0
+        // Если подписка помечена как безлимитная
+        if (unlimited) return false
+        
+        // Если дата окончания = 0 или очень маленькая (безлимитная подписка)
+        if (expiryDate != null && (expiryDate == 0L || expiryDate < 1000000000L)) return false
+        
+        // Если нет информации о трафике или трафик <= 0
+        if (totalTraffic == null || totalTraffic <= 0) return false
+        
+        // Если трафик очень большой (> 500 GB), считаем безлимитом
+        if (totalTraffic > 500L * 1024 * 1024 * 1024) return false
+        
+        return true
     }
     
     /**

@@ -141,6 +141,13 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Проверяем завершен ли onboarding
+        if (!isOnboardingCompleted()) {
+            Log.d("MainActivity", "Onboarding not completed, starting OnboardingActivity")
+            startOnboardingActivity()
+            return
+        }
+        
         // Включаем edge-to-edge режим (приложение на весь экран)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         
@@ -209,9 +216,12 @@ class MainActivity : FragmentActivity() {
         
         // Периодическое обновление подписки отключено - проверка только при включении VPN
         
-        // Запрашиваем разрешение на уведомления (для Android 13+)
+        // Запрашиваем разрешение на уведомления (для Android 13+) только если они были включены в onboarding
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            val vpnPrefs = getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+            val notificationsEnabled = vpnPrefs.getBoolean("notifications_enabled", false)
+            
+            if (notificationsEnabled && !NotificationManagerCompat.from(this).areNotificationsEnabled()) {
                 notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         }
@@ -358,20 +368,50 @@ class MainActivity : FragmentActivity() {
     /**
      * Обработка deep link из Telegram бота
      */
+    /**
+     * Обработка deep link из любых приложений (WhatsApp, Telegram, браузер и т.д.)
+     */
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
         
         val data = intent.data
         if (data != null) {
             var configUrl: String? = null
+            val originalUrl = data.toString()
+            
+            Log.d("MainActivity", "Received deep link: $originalUrl")
+            
+            // Проверяем настройку автоматического добавления конфигов
+            val prefs = getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+            val autoAddConfigsEnabled = prefs.getBoolean("auto_add_configs", true)
+            
+            if (!autoAddConfigsEnabled) {
+                Log.d("MainActivity", "Auto-add configs disabled, ignoring deep link")
+                showNotification("Автодобавление конфигов отключено в настройках", 3000)
+                return
+            }
             
             when {
+                // Кастомная схема kizvpn://
                 data.scheme == "kizvpn" -> {
-                    // kizvpn://vless://...
-                    configUrl = data.toString().replace("kizvpn://", "")
+                    configUrl = originalUrl.replace("kizvpn://", "")
+                    Log.d("MainActivity", "KizVPN scheme detected: $configUrl")
                 }
+                
+                // VPN протоколы напрямую
+                data.scheme in listOf("vless", "vmess", "ss", "trojan") -> {
+                    configUrl = originalUrl
+                    Log.d("MainActivity", "VPN protocol scheme detected: ${data.scheme}")
+                }
+                
+                // HTTP/HTTPS ссылки (Subscription URL)
+                data.scheme in listOf("http", "https") -> {
+                    configUrl = originalUrl
+                    Log.d("MainActivity", "HTTP/HTTPS URL detected, treating as subscription URL")
+                }
+                
+                // Старая логика для совместимости
                 data.scheme == "https" && data.host == "your-domain.com" -> {
-                    // https://your-domain.com/connect?vless=...
                     configUrl = intent.getStringExtra("vless") ?: data.getQueryParameter("vless")
                     if (configUrl == null && data.path?.contains("/connect") == true) {
                         configUrl = data.fragment
@@ -380,26 +420,74 @@ class MainActivity : FragmentActivity() {
             }
             
             if (!configUrl.isNullOrBlank()) {
-                // Сохраняем конфиг
-                saveConfig(configUrl)
-                viewModel.setVpnConfig(configUrl)
-                
-                // Парсим и проверяем
-                val parsed = configParser.parseConfig(configUrl)
-                if (parsed != null) {
-                    Toast.makeText(this, "Конфиг получен из Telegram", Toast.LENGTH_SHORT).show()
-                    // Проверяем подписку
-                    checkSubscriptionFromConfig(configUrl)
-                    // Автоматически подключаемся
-                    connectToVpn(configUrl)
-                } else {
-                    // Показываем уведомление вверху экрана
-                    configNotificationState.value = "Неверный формат конфига"
-                    lifecycleScope.launch {
+                Log.d("MainActivity", "Processing config URL: ${configUrl.take(100)}...")
+                processIncomingConfig(configUrl, originalUrl)
+            } else {
+                Log.w("MainActivity", "No valid config found in deep link")
+            }
+        }
+    }
+    
+    /**
+     * Обработка входящего конфига из deep link
+     */
+    private fun processIncomingConfig(configUrl: String, originalUrl: String) {
+        lifecycleScope.launch {
+            try {
+                // Определяем тип конфига
+                when {
+                    // HTTP/HTTPS - это Subscription URL
+                    configUrl.startsWith("http://") || configUrl.startsWith("https://") -> {
+                        Log.d("MainActivity", "Processing as Subscription URL")
+                        
+                        // Показываем уведомление о загрузке
+                        configNotificationState.value = "Загрузка конфигурации..."
+                        
+                        // Проверяем subscription URL (уведомление покажется внутри метода после успешной загрузки)
+                        checkSubscriptionFromUrl(configUrl)
+                        
+                        // Уведомление о загрузке будет заменено на результат внутри checkSubscriptionFromUrl
+                    }
+                    
+                    // Прямые VPN конфиги (vless://, vmess://, ss://, trojan://)
+                    configUrl.contains("://") -> {
+                        Log.d("MainActivity", "Processing as direct VPN config")
+                        
+                        // Парсим конфиг
+                        val parsed = configParser.parseConfig(configUrl)
+                        if (parsed != null) {
+                            // Сохраняем конфиг
+                            saveConfig(configUrl)
+                            viewModel.setVpnConfig(configUrl)
+                            
+                            // Показываем уведомление
+                            configNotificationState.value = "Конфиг добавлен из ссылки"
+                            
+                            // Проверяем подписку для конфига
+                            checkSubscriptionFromConfig(configUrl)
+                            
+                            delay(3000)
+                            configNotificationState.value = null
+                        } else {
+                            Log.w("MainActivity", "Failed to parse VPN config")
+                            configNotificationState.value = "Неверный формат конфига"
+                            delay(3000)
+                            configNotificationState.value = null
+                        }
+                    }
+                    
+                    else -> {
+                        Log.w("MainActivity", "Unknown config format")
+                        configNotificationState.value = "Неизвестный формат конфига"
                         delay(3000)
                         configNotificationState.value = null
                     }
                 }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error processing incoming config", e)
+                configNotificationState.value = "Ошибка обработки конфига"
+                delay(3000)
+                configNotificationState.value = null
             }
         }
     }
@@ -1788,6 +1876,9 @@ class MainActivity : FragmentActivity() {
         Log.d("MainActivity", "URL: $subscriptionUrl")
         Log.d("MainActivity", "Force update: $forceUpdate")
         
+        // Сбрасываем флаг уведомления в начале, чтобы избежать дублирования уведомлений
+        shouldShowSubscriptionNotification = false
+        
         // Если VPN был вручную отключен, не проверяем подписку (чтобы избежать автоподключения)
         // Исключение: если это принудительное обновление при смене конфига
         if (wasManuallyDisconnected && !forceUpdate) {
@@ -1920,6 +2011,73 @@ class MainActivity : FragmentActivity() {
                                         
                                         editor.putString("subscription_urls_list", subscriptionsList.toString())
                                         
+                                        // ИСПРАВЛЕНИЕ: Также сохраняем в subscription_blocks для отображения в UI
+                                        val subscriptionBlocksJson = prefs.getString("subscription_blocks", "[]")
+                                        val subscriptionBlocksArray = try { 
+                                            org.json.JSONArray(subscriptionBlocksJson) 
+                                        } catch (e: Exception) { 
+                                            org.json.JSONArray() 
+                                        }
+                                        
+                                        // Проверяем, есть ли уже этот блок подписки
+                                        var existingBlockIndex = -1
+                                        for (i in 0 until subscriptionBlocksArray.length()) {
+                                            val blockItem = subscriptionBlocksArray.getJSONObject(i)
+                                            if (blockItem.getString("url") == trimmedUrl) {
+                                                existingBlockIndex = i
+                                                break
+                                            }
+                                        }
+                                        
+                                        // Создаем блок подписки для UI
+                                        val subscriptionBlockObject = org.json.JSONObject()
+                                        val subId = if (existingBlockIndex >= 0) {
+                                            subscriptionBlocksArray.getJSONObject(existingBlockIndex).getString("id")
+                                        } else {
+                                            System.currentTimeMillis().toString()
+                                        }
+                                        
+                                        subscriptionBlockObject.put("id", subId)
+                                        subscriptionBlockObject.put("url", trimmedUrl)
+                                        subscriptionBlockObject.put("name", "Subscription (${configResponse.size})")
+                                        
+                                        // Добавляем информацию о подписке
+                                        subscriptionInfo.formatUsedTraffic()?.let { 
+                                            subscriptionBlockObject.put("usedTraffic", it) 
+                                        }
+                                        subscriptionInfo.formatTotalTraffic()?.let { 
+                                            subscriptionBlockObject.put("totalTraffic", it) 
+                                        }
+                                        subscriptionInfo.usedTraffic?.let { 
+                                            subscriptionBlockObject.put("usedTrafficBytes", it) 
+                                        }
+                                        subscriptionInfo.totalTraffic?.let { 
+                                            subscriptionBlockObject.put("totalTrafficBytes", it) 
+                                        }
+                                        val daysText = subscriptionInfo.format()
+                                        if (daysText != getString(R.string.not_activated)) {
+                                            subscriptionBlockObject.put("daysRemaining", daysText)
+                                        }
+                                        
+                                        // Добавляем конфиги в блок
+                                        val blockConfigsArray = org.json.JSONArray()
+                                        configResponse.forEach { config ->
+                                            blockConfigsArray.put(config)
+                                        }
+                                        subscriptionBlockObject.put("configs", blockConfigsArray)
+                                        
+                                        if (existingBlockIndex >= 0) {
+                                            // Обновляем существующий блок
+                                            subscriptionBlocksArray.put(existingBlockIndex, subscriptionBlockObject)
+                                            Log.d("MainActivity", "Updated existing subscription block in UI")
+                                        } else {
+                                            // Добавляем новый блок
+                                            subscriptionBlocksArray.put(subscriptionBlockObject)
+                                            Log.d("MainActivity", "Added new subscription block to UI")
+                                        }
+                                        
+                                        editor.putString("subscription_blocks", subscriptionBlocksArray.toString())
+                                        
                                         // Также сохраняем Subscription URL для всех конфигов из этого URL (для обратной совместимости)
                                         configResponse.forEach { config ->
                                             val parsed = configParser.parseConfig(config)
@@ -1932,7 +2090,7 @@ class MainActivity : FragmentActivity() {
                                         }
                                         
                                         editor.apply()
-                                        Logger.info(Logger.Tag.MAIN, "Found ${configResponse.size} config(s) in subscription URL, saved count and list")
+                                        Logger.info(Logger.Tag.MAIN, "Found ${configResponse.size} config(s) in subscription URL, saved to both subscription_urls_list and subscription_blocks")
                                     }
                                     
                                     if (!configResponse.isNullOrEmpty()) {
@@ -1965,22 +2123,28 @@ class MainActivity : FragmentActivity() {
                                             }
                                             
                                             // Также сохраняем общую информацию о подписке
-                                            saveSubscriptionInfo(updatedInfo, shouldShowNotification = shouldShowSubscriptionNotification)
+                                            // ВАЖНО: Сбрасываем флаг уведомления, чтобы избежать дублирования
+                                            shouldShowSubscriptionNotification = false
+                                            saveSubscriptionInfo(updatedInfo, shouldShowNotification = false)
                                             
                                             // НЕ подключаемся автоматически при проверке подписки через Subscription URL
                                             // Автоподключение происходит только при явном нажатии кнопки подключения
                                             Logger.info(Logger.Tag.MAIN, "Subscription URL checked, configs loaded. Waiting for user to connect manually.")
                                         } else {
                                             Logger.configError(Logger.Tag.MAIN, "Failed to parse config from subscription URL")
+                                            // Сбрасываем флаг уведомления, чтобы избежать дублирования
+                                            shouldShowSubscriptionNotification = false
                                             // Сохраняем подписку
-                                            saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = shouldShowSubscriptionNotification)
+                                            saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = false)
                                             // Дополнительное уведомление об ошибке
                                             showNotification("⚠️ Не удалось загрузить конфиг", 5000)
                                         }
                                     } else {
                                         Logger.warn(Logger.Tag.MAIN, "No configs found in subscription URL response")
+                                        // Сбрасываем флаг уведомления, чтобы избежать дублирования
+                                        shouldShowSubscriptionNotification = false
                                         // Сохраняем подписку
-                                        saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = shouldShowSubscriptionNotification)
+                                        saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = false)
                                         // Уведомление "Конфиги не найдены" удалено - не показываем его, так как это может быть нормально
                                     }
                                 }
@@ -1991,7 +2155,9 @@ class MainActivity : FragmentActivity() {
                                 withContext(Dispatchers.Main) {
                                     // Сохраняем подписку даже если конфиги не удалось загрузить из-за сетевой ошибки
                                     // Информация о подписке уже получена из заголовков, поэтому просто сохраняем её
-                                    saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = shouldShowSubscriptionNotification)
+                                    // Сбрасываем флаг уведомления, чтобы избежать дублирования
+                                    shouldShowSubscriptionNotification = false
+                                    saveSubscriptionInfo(subscriptionInfo, shouldShowNotification = false)
                                 }
                             }
                         }
@@ -2515,8 +2681,27 @@ class MainActivity : FragmentActivity() {
             onUpdateSubscriptionInfo = { newSubscriptionInfo ->
                 subscriptionInfoState.value = newSubscriptionInfo
                 this.subscriptionInfo = newSubscriptionInfo
-            }
+            },
+            biometricAuthManager = biometricAuthManager // Передаем BiometricAuthManager
         )
+    }
+    
+    /**
+     * Проверка завершения onboarding
+     */
+    private fun isOnboardingCompleted(): Boolean {
+        val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        return prefs.getBoolean("onboarding_completed", false)
+    }
+    
+    /**
+     * Запуск OnboardingActivity
+     */
+    private fun startOnboardingActivity() {
+        val intent = Intent(this, com.kizvpn.client.ui.onboarding.OnboardingActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
     
 }

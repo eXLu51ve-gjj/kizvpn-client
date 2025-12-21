@@ -53,7 +53,8 @@ fun AppNavHost(
     onSubscriptionUrlCheck: ((String) -> Unit)? = null, // Callback для проверки subscription URL
     onShowNetworkChart: () -> Unit = {}, // Callback для показа графика сети
     isVpnConnected: Boolean = false, // Статус подключения VPN
-    onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {} // Callback для обновления информации о подписке
+    onUpdateSubscriptionInfo: (com.kizvpn.client.data.SubscriptionInfo) -> Unit = {}, // Callback для обновления информации о подписке
+    biometricAuthManager: com.kizvpn.client.security.BiometricAuthManager? = null // Добавляем BiometricAuthManager
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
@@ -84,7 +85,8 @@ fun AppNavHost(
                 configNotification = configNotification,
                 subscriptionInfo = subscriptionInfo,
                 viewModel = viewModel,
-                onShowConfigNotification = onShowConfigNotification
+                onShowConfigNotification = onShowConfigNotification,
+                biometricAuthManager = biometricAuthManager // Передаем BiometricAuthManager
             )
         }
         
