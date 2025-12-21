@@ -64,6 +64,8 @@
     <string name="additional_settings_description">Настройте дополнительные функции для удобства использования</string>
     <string name="auto_connect_title">Автоподключение</string>
     <string name="auto_connect_description">Автоматически подключаться к VPN при запуске приложения</string>
+    <string name="auto_connect">Автоподключение</string>
+    <string name="auto_connect_desc">Автоматически подключаться при запуске</string>
     
     <!-- Автоматическое добавление конфигов -->
     <string name="auto_add_configs_title">Автодобавление конфигов</string>
