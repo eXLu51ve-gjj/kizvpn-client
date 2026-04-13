@@ -40,13 +40,13 @@
 
 ### Последний релиз
 
-[![Download APK](https://img.shields.io/badge/Скачать-APK-green.svg)](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest)
+[![Download APK](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
 
 **Текущая версия:** v2.2.1  
 **Размер:** ~162 MB  
 **Минимум Android:** 8.0 (API 26)
 
-[📦 Скачать последний APK](https://github.com/eXLu51ve-gjj/kiz-vpn-client/releases/latest/download/KIZ_VPN.public.2.2.1.apk)
+[📦 Скачать последний APK](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
 
 ### Установка
 
