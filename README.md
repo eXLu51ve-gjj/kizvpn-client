@@ -40,7 +40,7 @@
 
 ### Последний релиз
 
-[![Download APK](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
 
 **Текущая версия:** v2.2.1  
 **Размер:** ~162 MB  
