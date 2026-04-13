@@ -50,13 +50,13 @@
 
 ### Latest Release
 
-[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK-green.svg)](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.v3.0.apk)
 
 **Current Version:** v2.2.1  
 **Size:** ~162 MB  
 **Min Android:** 8.0 (API 26)
 
-[📦 Download Latest APK](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.apk)
+[📦 Download Latest APK](https://github.com/eXLu51ve-gjj/kizvpn-client/releases/download/v3.0/kizvpn.v3.0.apk)
 
 ### Installation
 
